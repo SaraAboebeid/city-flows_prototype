@@ -1,0 +1,643 @@
+<title>Göteborg 24h</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.14/dist.min.js"></script>
+<style>
+  :root{
+    --ground:#080D13; --panel:#0E1720; --panel-edge:#1D2C39;
+    --ink:#DCE6F0; --ink-dim:#8195A8; --ink-faint:#55697C;
+    --accent:#4FC3F7;
+    --s1:6px; --s2:10px; --s3:16px; --s4:24px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    height:100vh; overflow:hidden;
+  }
+  #map{position:absolute; inset:0; background:var(--ground)}
+  canvas{outline:none}
+  .overlay{position:absolute; z-index:5; pointer-events:none}
+  .overlay > *{pointer-events:auto}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+  #title{top:var(--s4); left:var(--s4); max-width:330px}
+  #title h1{
+    font-family:"IBM Plex Sans Condensed","Segoe UI",sans-serif;
+    font-weight:700; font-size:29px; line-height:1.05; margin:0;
+    letter-spacing:-.01em; text-wrap:balance;
+  }
+  #title .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+    letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); margin-bottom:var(--s2);
+  }
+  #title p{
+    margin:var(--s2) 0 0; font-size:12.5px; line-height:1.5;
+    color:var(--ink-dim);
+  }
+
+  /* ---- right panel ---- */
+  #panel{
+    top:var(--s4); right:var(--s4); width:236px;
+    max-height:calc(100vh - 220px); overflow-y:auto;
+    background:color-mix(in srgb, var(--panel) 90%, transparent);
+    border:1px solid var(--panel-edge); border-radius:3px;
+    padding:var(--s3); backdrop-filter:blur(8px);
+    scrollbar-width:thin; scrollbar-color:var(--panel-edge) transparent;
+  }
+  .grouphead{
+    font-family:"IBM Plex Mono",monospace; font-size:9.5px; font-weight:500;
+    letter-spacing:.15em; text-transform:uppercase; color:var(--ink-faint);
+    margin:0 0 var(--s2);
+  }
+  .group + .group{margin-top:var(--s3);
+    padding-top:var(--s3); border-top:1px solid var(--panel-edge)}
+
+  .seg{display:flex; gap:0; margin-bottom:var(--s3)}
+  .seg button{
+    flex:1; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+    letter-spacing:.08em; padding:6px 0; cursor:pointer;
+    background:transparent; color:var(--ink-dim);
+    border:1px solid var(--panel-edge);
+  }
+  .seg button:first-child{border-radius:2px 0 0 2px}
+  .seg button:last-child{border-radius:0 2px 2px 0; border-left:0}
+  .seg button[aria-pressed="true"]{
+    background:var(--accent); color:var(--ground); border-color:var(--accent)}
+  .seg button:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
+
+  .cat{
+    display:grid; grid-template-columns:10px 1fr auto; align-items:center;
+    gap:var(--s2); width:100%; padding:4px 0; background:none; border:0;
+    color:var(--ink); font:inherit; font-size:12px; cursor:pointer;
+    text-align:left;
+  }
+  .cat:hover{color:#fff}
+  .cat:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
+  .cat .sw{width:10px; height:10px; border-radius:2px; flex:none}
+  .cat .n{font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+    font-variant-numeric:tabular-nums; color:var(--ink-dim)}
+  .cat[aria-pressed="false"]{opacity:.3}
+  .cat[aria-pressed="false"] .sw{background:transparent!important;
+    box-shadow:inset 0 0 0 1.5px currentColor}
+
+  .chips{display:flex; flex-wrap:wrap; gap:5px}
+  .chip{
+    font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.04em;
+    padding:4px 8px; border-radius:2px; cursor:pointer;
+    background:transparent; color:var(--ink-dim);
+    border:1px solid var(--panel-edge);
+  }
+  .chip[aria-pressed="true"]{color:var(--ink); border-color:var(--ink-faint);
+    background:color-mix(in srgb, var(--accent) 14%, transparent)}
+  .chip:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
+
+  /* ---- bottom bar ---- */
+  #bar{
+    left:var(--s4); right:var(--s4); bottom:var(--s4);
+    display:grid; grid-template-columns:auto auto 1fr; gap:var(--s4);
+    align-items:center;
+    background:color-mix(in srgb, var(--panel) 90%, transparent);
+    border:1px solid var(--panel-edge); border-radius:3px;
+    padding:var(--s3) var(--s4); backdrop-filter:blur(8px);
+  }
+  #clock{
+    font-family:"IBM Plex Mono",monospace; font-size:36px; font-weight:500;
+    line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums;
+  }
+  #clock .z{font-size:12px; color:var(--ink-faint); margin-left:6px}
+  #active{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+    color:var(--ink-dim); margin-top:7px; font-variant-numeric:tabular-nums;
+  }
+  .controls{display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap;
+    max-width:250px}
+  button.ctl{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.06em;
+    background:transparent; color:var(--ink-dim);
+    border:1px solid var(--panel-edge); border-radius:2px;
+    padding:6px 10px; cursor:pointer;
+  }
+  button.ctl:hover{color:var(--ink); border-color:var(--ink-faint)}
+  button.ctl[aria-pressed="true"]{color:var(--ground); background:var(--accent);
+    border-color:var(--accent)}
+  button.ctl:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
+
+  #chartWrap{position:relative}
+  #chart{display:block; width:100%; height:56px; cursor:pointer}
+  #axis{display:flex; justify-content:space-between;
+    font-family:"IBM Plex Mono",monospace; font-size:9.5px;
+    color:var(--ink-faint); margin-top:3px}
+  #chartLabel{
+    position:absolute; top:-2px; left:0;
+    font-family:"IBM Plex Mono",monospace; font-size:9px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint);
+  }
+
+  #note{
+    position:absolute; left:var(--s4); bottom:150px; z-index:5;
+    font-family:"IBM Plex Mono",monospace; font-size:9.5px;
+    color:var(--ink-faint); letter-spacing:.04em; max-width:320px;
+    line-height:1.6;
+  }
+  #loading{
+    position:absolute; inset:0; z-index:20; display:grid; place-items:center;
+    background:var(--ground); font-family:"IBM Plex Mono",monospace;
+    font-size:12px; color:var(--ink-dim); letter-spacing:.1em;
+  }
+  @media (max-width:1000px){
+    #panel{display:none} #note{display:none}
+    #title h1{font-size:21px}
+    #bar{grid-template-columns:auto 1fr; gap:var(--s3); padding:var(--s3)}
+    #clock{font-size:25px}
+  }
+</style>
+
+<div id="map"></div>
+
+<div id="title" class="overlay">
+  <div class="eyebrow">Synthetic population · 2019</div>
+  <h1>A day of movement in Göteborg</h1>
+  <p>__SUBTITLE__</p>
+</div>
+
+<aside id="panel" class="overlay">
+  <div class="group">
+    <h2 class="grouphead">Colour by</h2>
+    <div class="seg" id="dimseg">
+      <button data-dim="mode" aria-pressed="true">MODE</button>
+      <button data-dim="purpose" aria-pressed="false">PURPOSE</button>
+    </div>
+    <div id="cats"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Age band</h2>
+    <div class="chips" id="fAge"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Sex</h2>
+    <div class="chips" id="fSex"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Main activity</h2>
+    <div class="chips" id="fStatus"></div>
+  </div>
+</aside>
+
+<div id="note" class="overlay">__NOTE__</div>
+
+<div id="bar" class="overlay">
+  <div>
+    <div id="clock" class="mono">08:00<span class="z">CET</span></div>
+    <div id="active">— trips moving</div>
+  </div>
+  <div class="controls">
+    <button class="ctl" id="play" aria-pressed="true">PAUSE</button>
+    <button class="ctl spd" data-s="60" aria-pressed="false">1×</button>
+    <button class="ctl spd" data-s="180" aria-pressed="true">3×</button>
+    <button class="ctl spd" data-s="600" aria-pressed="false">10×</button>
+    <button class="ctl" id="loadBtn" aria-pressed="false">STREET LOAD</button>
+  </div>
+  <div id="chartWrap">
+    <div id="chartLabel">Trips under way</div>
+    <canvas id="chart"></canvas>
+    <div id="axis"><span>03:00</span><span>08:00</span><span>13:00</span><span>18:00</span><span>23:00</span></div>
+  </div>
+</div>
+
+<div id="loading">DECODING TRIPS…</div>
+
+<script id="payload" type="application/json">__PAYLOAD__</script>
+<script id="basemap" type="application/json">__BASEMAP__</script>
+<script id="loadgrid" type="application/json">__LOADGRID__</script>
+
+<script>
+(function(){
+  "use strict";
+  const PAY  = JSON.parse(document.getElementById("payload").textContent);
+  const BASE = JSON.parse(document.getElementById("basemap").textContent);
+  const LOAD = JSON.parse(document.getElementById("loadgrid").textContent);
+
+  const MODE_COLORS = {
+    "Car":[255,138,61], "Train/Tram":[79,195,247], "Bus":[93,211,158],
+    "Bicycle/E-bike":[255,209,102], "Walking":[240,106,155],
+    "Boat":[126,232,250], "Other":[148,163,178]
+  };
+  const PURPOSE_COLORS = {
+    "Home":[242,180,65], "Work":[79,195,247], "Leisure":[240,106,155],
+    "Grocery":[93,211,158], "Pickup/Dropoff child":[199,146,234],
+    "Education":[126,232,250], "Shopping":[255,107,107],
+    "Travel":[163,190,140], "Healthcare":[255,209,102], "Other":[148,163,178]
+  };
+
+  function b64(s){
+    const bin = atob(s), out = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i);
+    return out;
+  }
+
+  // ---------- decode trips ----------
+  const M = 8;                                  // int32 per trip
+  const mb = b64(PAY.meta);
+  const meta = new Int32Array(mb.buffer, mb.byteOffset, PAY.n*M);
+  const cb = b64(PAY.coords);
+  const cv = new DataView(cb.buffer, cb.byteOffset, cb.byteLength);
+
+  const N = PAY.n;
+  let totalV = 0;
+  for(let i=0;i<N;i++) totalV += meta[i*M+3];
+
+  const POS = new Float32Array(totalV*2);
+  const TS  = new Float32Array(totalV);
+  const off = new Uint32Array(N+1);
+
+  let o = 0, w = 0, tMin = Infinity, tMax = -Infinity;
+  for(let i=0;i<N;i++){
+    const t0 = meta[i*M], t1 = meta[i*M+1], np = meta[i*M+3];
+    off[i] = w;
+    let x = cv.getInt32(o, true); o += 4;
+    let y = cv.getInt32(o, true); o += 4;
+    const xs = new Float64Array(np), ys = new Float64Array(np);
+    xs[0]=x; ys[0]=y;
+    for(let k=1;k<np;k++){
+      x += cv.getInt16(o, true); o += 2;
+      y += cv.getInt16(o, true); o += 2;
+      xs[k]=x; ys[k]=y;
+    }
+    let cum = 0;
+    const d = new Float64Array(np);
+    for(let k=1;k<np;k++){
+      cum += Math.hypot(xs[k]-xs[k-1], ys[k]-ys[k-1]); d[k]=cum;
+    }
+    const span = Math.max(1, t1-t0);
+    for(let k=0;k<np;k++){
+      POS[(w+k)*2]   = xs[k]/1e5;
+      POS[(w+k)*2+1] = ys[k]/1e5;
+      TS[w+k] = t0 + (cum>0 ? d[k]/cum : (np>1 ? k/(np-1) : 0))*span;
+    }
+    w += np;
+    if(t0<tMin) tMin=t0;
+    if(t1>tMax) tMax=t1;
+  }
+  off[N] = w;
+  const T0 = Math.floor(tMin), T1 = Math.ceil(tMax);
+
+  // ---------- state ----------
+  const DIMS = {
+    mode:    {names:PAY.modes,    colors:MODE_COLORS,    slot:2},
+    purpose: {names:PAY.purposes, colors:PURPOSE_COLORS, slot:4}
+  };
+  let dim = "mode";
+  const on = {mode:new Set(PAY.modes), purpose:new Set(PAY.purposes)};
+  const filt = {
+    age:   {names:PAY.ages,   slot:5, sel:new Set(PAY.ages)},
+    sex:   {names:PAY.sexes,  slot:6, sel:new Set(PAY.sexes)},
+    status:{names:PAY.status, slot:7, sel:new Set(PAY.status)}
+  };
+  let current = 8*3600, playing = true, speed = 180, showLoad = false;
+  const TRAIL = 780;
+
+  function passesDemo(i){
+    for(const k in filt){
+      const f = filt[k];
+      if(!f.sel.has(f.names[meta[i*M+f.slot]])) return false;
+    }
+    return true;
+  }
+
+  // ---------- build per-category binary data ----------
+  let layerData = [], seriesCache = null, activeIdx = [];
+
+  function rebuild(){
+    const D = DIMS[dim];
+    const groups = new Map();
+    activeIdx = [];
+    for(let i=0;i<N;i++){
+      if(!passesDemo(i)) continue;
+      const name = D.names[meta[i*M+D.slot]];
+      if(!on[dim].has(name)) { activeIdx.push(i); continue; }
+      let g = groups.get(name);
+      if(!g){ g = {ids:[], verts:0}; groups.set(name, g); }
+      g.ids.push(i); g.verts += meta[i*M+3];
+      activeIdx.push(i);
+    }
+    layerData = [];
+    for(const [name,g] of groups){
+      const pos = new Float32Array(g.verts*2);
+      const ts  = new Float32Array(g.verts);
+      const si  = new Uint32Array(g.ids.length+1);
+      let p = 0;
+      for(let j=0;j<g.ids.length;j++){
+        const i = g.ids[j], s = off[i], n = off[i+1]-off[i];
+        si[j] = p;
+        pos.set(POS.subarray(s*2,(s+n)*2), p*2);
+        ts.set(TS.subarray(s,s+n), p);
+        p += n;
+      }
+      si[g.ids.length] = p;
+      layerData.push({
+        name,
+        color: D.colors[name] || [200,200,200],
+        data:{length:g.ids.length, startIndices:si,
+              attributes:{getPath:{value:pos,size:2},
+                          getTimestamps:{value:ts,size:1}}}
+      });
+    }
+    seriesCache = null;
+    renderPanel();
+  }
+
+  // ---------- load grid ----------
+  let loadCells = null;
+  if(LOAD && LOAD.ncell){
+    const pb = b64(LOAD.pos);
+    const pos32 = new Int32Array(pb.buffer, pb.byteOffset, LOAD.ncell*2);
+    const cbb = b64(LOAD.counts);
+    const cnt = new Uint16Array(cbb.buffer, cbb.byteOffset, LOAD.nbin*LOAD.ncell);
+    loadCells = {pos:pos32, cnt, nbin:LOAD.nbin, ncell:LOAD.ncell,
+                 hour0:LOAD.hour0, peak:LOAD.peak};
+  }
+  const RAMP = [[12,22,34],[26,58,88],[38,110,132],[92,168,140],
+                [206,204,110],[255,214,120],[255,246,200]];
+  function rampColor(f){
+    const x = Math.max(0, Math.min(1, f))*(RAMP.length-1);
+    const i = Math.floor(x), t = x-i;
+    const a = RAMP[i], b = RAMP[Math.min(i+1, RAMP.length-1)];
+    return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+  }
+  // rows are identical for every frame within an hour, so build once per bin
+  const loadRowCache = new Map();
+  function loadRows(bin){
+    let rows = loadRowCache.get(bin);
+    if(rows) return rows;
+    const base = bin*loadCells.ncell;
+    const denom = Math.max(1, loadCells.peak*0.35);
+    rows = [];
+    for(let c=0;c<loadCells.ncell;c++){
+      const v = loadCells.cnt[base+c];
+      if(!v) continue;
+      const col = rampColor(Math.min(1, v/denom));
+      rows.push({p:[loadCells.pos[c*2]/1e5, loadCells.pos[c*2+1]/1e5],
+                 c:[col[0],col[1],col[2],185], v});
+    }
+    loadRowCache.set(bin, rows);
+    return rows;
+  }
+  function loadLayer(){
+    if(!showLoad || !loadCells) return null;
+    let bin = Math.floor(current/3600) - loadCells.hour0;
+    bin = Math.max(0, Math.min(loadCells.nbin-1, bin));
+    return new deck.ScatterplotLayer({
+      id:"load", data:loadRows(bin), getPosition:d=>d.p,
+      radiusUnits:"meters", getRadius:130, stroked:false,
+      getFillColor:d=>d.c,
+      updateTriggers:{getFillColor:[bin], getPosition:[bin]},
+      parameters:{depthTest:false}
+    });
+  }
+
+  // ---------- deck ----------
+  const {DeckGL, TripsLayer, PathLayer, PolygonLayer,
+         TileLayer, BitmapLayer} = deck;
+  const USE_TILES = __USE_TILES__;
+
+  // Raster tiles give a real, legible city, but only work where the page is
+  // served from an ordinary origin. The Artifact sandbox blocks them by CSP,
+  // so that build falls back to the embedded vector geometry below.
+  const baseLayers = USE_TILES ? [
+    new TileLayer({
+      id:"basemap-tiles",
+      data:"https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+      minZoom:0, maxZoom:19, tileSize:256,
+      renderSubLayers: props => {
+        const bb = props.tile.boundingBox;
+        return new BitmapLayer(props, {
+          data:null, image:props.data,
+          bounds:[bb[0][0], bb[0][1], bb[1][0], bb[1][1]]
+        });
+      }
+    })
+  ] : [
+    new PolygonLayer({id:"water", data:BASE.water, getPolygon:d=>d,
+      filled:true, stroked:false, getFillColor:[22,41,60],
+      parameters:{depthTest:false}}),
+    new PathLayer({id:"minor", data:BASE.minor, getPath:d=>d,
+      getColor:[30,44,58], getWidth:1, widthUnits:"pixels",
+      widthMinPixels:0.6, parameters:{depthTest:false}}),
+    new PathLayer({id:"major", data:BASE.major, getPath:d=>d,
+      getColor:[51,72,92], getWidth:1.6, widthUnits:"pixels",
+      widthMinPixels:1, parameters:{depthTest:false}}),
+    new PathLayer({id:"coast", data:BASE.coast, getPath:d=>d,
+      getColor:[62,97,128], getWidth:1.2, widthUnits:"pixels",
+      widthMinPixels:1, parameters:{depthTest:false}})
+  ];
+
+  function tripLayers(){
+    const op = showLoad ? 0.34 : 0.86;
+    return layerData.map(L => new TripsLayer({
+      id:"trips-"+L.name, data:L.data, getColor:L.color,
+      opacity:op, widthMinPixels:1.7, jointRounded:true, capRounded:true,
+      trailLength:TRAIL, currentTime:current, parameters:{depthTest:false}
+    }));
+  }
+
+  const dg = new DeckGL({
+    container:"map",
+    initialViewState:{longitude:11.968, latitude:57.706, zoom:10.6,
+                      pitch:0, bearing:0},
+    controller:true,
+    layers:[...baseLayers],
+    style:{background:"#080D13"}
+  });
+
+  function render(){
+    const ll = loadLayer();
+    dg.setProps({layers:[...baseLayers, ...(ll?[ll]:[]), ...tripLayers()]});
+  }
+
+  // ---------- panel ----------
+  const catsEl = document.getElementById("cats");
+  function renderPanel(){
+    const D = DIMS[dim];
+    const counts = new Map();
+    for(const i of activeIdx){
+      const nm = D.names[meta[i*M+D.slot]];
+      counts.set(nm, (counts.get(nm)||0)+1);
+    }
+    catsEl.innerHTML = "";
+    D.names.forEach(name=>{
+      if(!counts.has(name) && !on[dim].has(name)) return;
+      const c = D.colors[name]||[200,200,200];
+      const b = document.createElement("button");
+      b.className = "cat";
+      b.setAttribute("aria-pressed", on[dim].has(name) ? "true":"false");
+      b.style.color = `rgb(${c.join(",")})`;
+      b.innerHTML =
+        `<span class="sw" style="background:rgb(${c.join(",")})"></span>`+
+        `<span style="color:var(--ink)">${name}</span>`+
+        `<span class="n">${(counts.get(name)||0).toLocaleString("en")}</span>`;
+      b.addEventListener("click", ()=>{
+        if(on[dim].has(name)) on[dim].delete(name); else on[dim].add(name);
+        rebuild(); render();
+      });
+      catsEl.appendChild(b);
+    });
+  }
+
+  function chipRow(elId, key){
+    const el = document.getElementById(elId), f = filt[key];
+    el.innerHTML = "";
+    f.names.forEach(name=>{
+      const b = document.createElement("button");
+      b.className = "chip";
+      b.textContent = name;
+      b.setAttribute("aria-pressed", f.sel.has(name) ? "true":"false");
+      b.addEventListener("click", ()=>{
+        if(f.sel.has(name)) f.sel.delete(name); else f.sel.add(name);
+        b.setAttribute("aria-pressed", f.sel.has(name) ? "true":"false");
+        rebuild(); render();
+      });
+      el.appendChild(b);
+    });
+  }
+  chipRow("fAge","age"); chipRow("fSex","sex"); chipRow("fStatus","status");
+
+  document.querySelectorAll("#dimseg button").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      dim = b.dataset.dim;
+      document.querySelectorAll("#dimseg button").forEach(o=>
+        o.setAttribute("aria-pressed", String(o===b)));
+      document.getElementById("chartLabel").textContent =
+        "Trips under way · by " + dim;
+      rebuild(); render();
+    });
+  });
+
+  // ---------- stacked chart ----------
+  const NB = 96;
+  const cvs = document.getElementById("chart");
+  const cx2 = cvs.getContext("2d");
+
+  function series(){
+    if(seriesCache) return seriesCache;
+    const D = DIMS[dim];
+    const names = D.names.filter(n=>on[dim].has(n));
+    const arr = names.map(()=>new Float64Array(NB));
+    const pos = new Map(names.map((n,k)=>[n,k]));
+    for(const i of activeIdx){
+      const nm = D.names[meta[i*M+D.slot]];
+      const k = pos.get(nm);
+      if(k===undefined) continue;
+      const a = Math.floor((meta[i*M]-T0)/(T1-T0)*NB);
+      const b = Math.floor((meta[i*M+1]-T0)/(T1-T0)*NB);
+      for(let x=Math.max(0,a); x<=Math.min(NB-1,b); x++) arr[k][x]++;
+    }
+    const tot = new Float64Array(NB);
+    arr.forEach(a=>{ for(let x=0;x<NB;x++) tot[x]+=a[x]; });
+    seriesCache = {names, arr, max:Math.max(1,...tot)};
+    return seriesCache;
+  }
+
+  function drawChart(){
+    const s = series(), D = DIMS[dim];
+    const dpr = window.devicePixelRatio||1;
+    const w = cvs.clientWidth, h = cvs.clientHeight;
+    cvs.width = w*dpr; cvs.height = h*dpr;
+    cx2.setTransform(dpr,0,0,dpr,0,0);
+    cx2.clearRect(0,0,w,h);
+    const bw = w/NB;
+    const base = new Float64Array(NB);
+    s.names.forEach((nm,k)=>{
+      const c = D.colors[nm]||[200,200,200];
+      cx2.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},.72)`;
+      cx2.beginPath();
+      cx2.moveTo(0, h - (base[0]/s.max)*(h-4));
+      for(let x=0;x<NB;x++){
+        const y = h - ((base[x]+s.arr[k][x])/s.max)*(h-4);
+        cx2.lineTo(x*bw, y); cx2.lineTo((x+1)*bw, y);
+      }
+      for(let x=NB-1;x>=0;x--){
+        const y = h - (base[x]/s.max)*(h-4);
+        cx2.lineTo((x+1)*bw, y); cx2.lineTo(x*bw, y);
+      }
+      cx2.closePath(); cx2.fill();
+      for(let x=0;x<NB;x++) base[x]+=s.arr[k][x];
+    });
+    const f=(current-T0)/(T1-T0), px=f*w;
+    cx2.strokeStyle="#DCE6F0"; cx2.lineWidth=1.2;
+    cx2.beginPath(); cx2.moveTo(px,0); cx2.lineTo(px,h); cx2.stroke();
+  }
+
+  cvs.addEventListener("click", e=>{
+    const r=cvs.getBoundingClientRect();
+    current = T0 + ((e.clientX-r.left)/r.width)*(T1-T0);
+    render(); paint();
+  });
+
+  // ---------- clock ----------
+  const clockEl=document.getElementById("clock");
+  const activeEl=document.getElementById("active");
+  let lastActive=0, acc=0;
+
+  function countActive(){
+    let n=0;
+    for(const i of activeIdx){
+      const D = DIMS[dim];
+      if(!on[dim].has(D.names[meta[i*M+D.slot]])) continue;
+      if(meta[i*M]<=current && meta[i*M+1]>=current) n++;
+    }
+    return n;
+  }
+  function paint(){
+    const s=Math.floor(current)%86400;
+    clockEl.innerHTML =
+      String(Math.floor(s/3600)).padStart(2,"0")+":"+
+      String(Math.floor((s%3600)/60)).padStart(2,"0")+
+      '<span class="z">CET</span>';
+    activeEl.textContent = lastActive.toLocaleString("en")+" trips moving";
+    drawChart();
+  }
+
+  let prev=performance.now();
+  function frame(now){
+    const dt=Math.min(0.1,(now-prev)/1000); prev=now;
+    if(playing){
+      current += dt*speed;
+      if(current>T1) current=T0;
+      acc+=dt;
+      if(acc>0.25){ lastActive=countActive(); acc=0; }
+    }
+    render(); paint();
+    requestAnimationFrame(frame);
+  }
+
+  document.getElementById("play").addEventListener("click", e=>{
+    playing=!playing;
+    e.currentTarget.textContent = playing?"PAUSE":"PLAY";
+    e.currentTarget.setAttribute("aria-pressed", String(playing));
+  });
+  document.querySelectorAll(".spd").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      speed=+b.dataset.s;
+      document.querySelectorAll(".spd").forEach(o=>
+        o.setAttribute("aria-pressed", String(o===b)));
+    });
+  });
+  const lb = document.getElementById("loadBtn");
+  if(!loadCells){ lb.disabled = true; lb.style.opacity = .4; }
+  lb.addEventListener("click", ()=>{
+    showLoad=!showLoad;
+    lb.setAttribute("aria-pressed", String(showLoad));
+    render();
+  });
+  window.addEventListener("resize", drawChart);
+
+  rebuild();
+  lastActive=countActive();
+  document.getElementById("loading").remove();
+  render(); paint();
+  requestAnimationFrame(frame);
+})();
+</script>
