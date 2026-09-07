@@ -37,6 +37,15 @@
     margin:var(--s2) 0 0; font-size:12.5px; line-height:1.5;
     color:var(--ink-dim);
   }
+  #cite{
+    font-size:10.5px; line-height:1.55; color:var(--ink-faint);
+    border-left:2px solid var(--panel-edge); padding-left:var(--s2);
+    margin-top:var(--s3);
+  }
+  #cite em{font-style:normal; color:var(--ink-dim)}
+  #cite a{color:var(--accent); text-decoration:none; word-break:break-all}
+  #cite a:hover{text-decoration:underline}
+  #cite a:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
 
   /* ---- right panel ---- */
   #panel{
@@ -158,9 +167,17 @@
 <div id="map"></div>
 
 <div id="title" class="overlay">
-  <div class="eyebrow">Synthetic population · 2019</div>
+  <div class="eyebrow">GAPSIM · Synthetic population 2019</div>
   <h1>A day of movement in Göteborg</h1>
   <p>__SUBTITLE__</p>
+  <p id="cite">
+    Somanath, Thuvander, Gil &amp; Hollberg (2024).
+    <em>Activity-based simulations for neighbourhood planning towards
+    social-spatial equity.</em>
+    Computers, Environment and Urban Systems 111, 102242.
+    <a href="https://doi.org/10.1016/j.compenvurbsys.2024.102242"
+       target="_blank" rel="noopener">doi.org/10.1016/j.compenvurbsys.2024.102242</a>
+  </p>
 </div>
 
 <aside id="panel" class="overlay">
@@ -362,9 +379,10 @@
     const pb = b64(LOAD.pos);
     const pos32 = new Int32Array(pb.buffer, pb.byteOffset, LOAD.ncell*2);
     const cbb = b64(LOAD.counts);
-    const cnt = new Uint16Array(cbb.buffer, cbb.byteOffset, LOAD.nbin*LOAD.ncell);
+    const cnt = new Uint8Array(cbb.buffer, cbb.byteOffset, LOAD.nbin*LOAD.ncell);
     loadCells = {pos:pos32, cnt, nbin:LOAD.nbin, ncell:LOAD.ncell,
                  hour0:LOAD.hour0, peak:LOAD.peak,
+                 binS:(LOAD.bin_min || 60) * 60,
                  radius:(LOAD.cell_m || 200) * 0.66};
   }
   const RAMP = [[12,22,34],[26,58,88],[38,110,132],[92,168,140],
@@ -381,21 +399,21 @@
     let rows = loadRowCache.get(bin);
     if(rows) return rows;
     const base = bin*loadCells.ncell;
-    const denom = Math.max(1, loadCells.peak*0.35);
     rows = [];
     for(let c=0;c<loadCells.ncell;c++){
-      const v = loadCells.cnt[base+c];
-      if(!v) continue;
-      const col = rampColor(Math.min(1, v/denom));
+      const u = loadCells.cnt[base+c];
+      if(!u) continue;
+      // counts are sqrt-scaled to uint8; saturate the ramp at ~36% of peak
+      const col = rampColor(Math.min(1, (u/255)/0.6));
       rows.push({p:[loadCells.pos[c*2]/1e5, loadCells.pos[c*2+1]/1e5],
-                 c:[col[0],col[1],col[2],185], v});
+                 c:[col[0],col[1],col[2],190]});
     }
     loadRowCache.set(bin, rows);
     return rows;
   }
   function loadLayer(){
     if(!showLoad || !loadCells) return null;
-    let bin = Math.floor(current/3600) - loadCells.hour0;
+    let bin = Math.floor((current - loadCells.hour0*3600)/loadCells.binS);
     bin = Math.max(0, Math.min(loadCells.nbin-1, bin));
     return new deck.ScatterplotLayer({
       id:"load", data:loadRows(bin), getPosition:d=>d.p,

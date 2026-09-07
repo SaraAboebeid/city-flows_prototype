@@ -20,12 +20,14 @@ if not os.path.exists(SRC):
 OUT = os.path.join(DER, "load_grid.json")
 
 CELL = 100.0                      # metres; 100 m ~ street-block resolution
+BIN_MIN = 15                      # minutes per time bin
 X0, Y0 = 299000.0, 6383900.0
 NX = int(np.ceil(36000 / CELL)) + 1
 NY = int(np.ceil(33400 / CELL)) + 1
 NCELL = NX * NY
-H0, H1 = 3, 23                    # hour bins, inclusive
-NBIN = H1 - H0 + 1
+H0, H1 = 3, 24                    # first hour, end hour (exclusive)
+BIN_S = BIN_MIN * 60
+NBIN = (H1 - H0) * 60 // BIN_MIN
 BIG = NBIN * NCELL + 1            # trip/key packing base
 
 to3006 = Transformer.from_crs("EPSG:4326", "EPSG:3006", always_xy=True)
@@ -59,7 +61,7 @@ for batch in pf.iter_batches(batch_size=40000,
     frac = idx / denom
 
     t = np.repeat(t0, npts) + frac * np.repeat(t1 - t0, npts)
-    hb = np.floor(t / 3600.0).astype(np.int64) - H0
+    hb = np.floor(t / BIN_S).astype(np.int64) - (H0 * 3600) // BIN_S
     np.clip(hb, 0, NBIN - 1, out=hb)
 
     ix = np.floor((x - X0) / CELL).astype(np.int64)
@@ -89,10 +91,17 @@ clon, clat = to4326.transform(cx, cy)
 
 sub = mat[:, active]
 peak = int(sub.max())
-print(f"peak cell load: {peak:,} trips in one hour")
+print(f"peak cell load: {peak:,} trips in one {BIN_MIN}-minute bin")
+
+hourly = sub.sum(axis=1).reshape(-1, 60 // BIN_MIN).sum(axis=1)
 print("busiest hours:",
-      ", ".join(f"{H0+i:02d}:00={v:,}" for i, v in
-                enumerate(sub.sum(axis=1)) if v > 0)[:300])
+      ", ".join(f"{H0+i:02d}:00={v:,}" for i, v in enumerate(hourly)
+                if v > 0)[:280])
+
+# uint8 with a square-root transfer: 4x smaller than uint16, and the sqrt
+# spreads the low end where a heat map needs the detail. Decode is
+# value ~= (u/255)^2 * peak.
+scaled = np.round(255 * np.sqrt(sub / max(peak, 1))).astype(np.uint8)
 
 pos = np.column_stack([np.round(np.asarray(clon) * 1e5),
                        np.round(np.asarray(clat) * 1e5)]).astype(np.int32)
@@ -100,12 +109,12 @@ payload = {
     "cell_m": CELL,
     "nx": NX, "ny": NY,
     "hour0": H0,
+    "bin_min": BIN_MIN,
     "nbin": NBIN,
     "ncell": int(len(active)),
     "peak": peak,
     "pos": base64.b64encode(pos.tobytes()).decode(),
-    "counts": base64.b64encode(
-        np.clip(sub, 0, 65535).astype(np.uint16).tobytes()).decode(),
+    "counts": base64.b64encode(scaled.tobytes()).decode(),
 }
 with open(OUT, "w", encoding="utf-8") as f:
     json.dump(payload, f, separators=(",", ":"))
