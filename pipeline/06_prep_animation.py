@@ -2,8 +2,8 @@
 deck.gl TripsLayer animation.
 
 Encoding (little-endian):
-  meta   : per trip -> 8 x int32
-           t_start, t_end, mode, npts, purpose, age, sex, status
+  meta   : per trip -> 9 x int32
+           t_start, t_end, mode, npts, purpose, age, sex, status, plausible
   coords : per trip -> int32 lon0,lat0 (1e-5 deg) then (npts-1) x int16 deltas
 Per-vertex timestamps are derived client-side from cumulative distance.
 """
@@ -16,7 +16,8 @@ import pandas as pd
 import pyarrow.parquet as pq
 from shapely.geometry import LineString
 
-for cand in ("trips_final.parquet", "trips_routed2.parquet",
+for cand in ("trips_final2.parquet", "trips_final.parquet",
+             "trips_routed2.parquet",
              "trips_routed.parquet", "trips_matched.parquet", "trips.parquet"):
     SRC = os.path.join(DER, cand)
     if os.path.exists(SRC):
@@ -71,8 +72,10 @@ if has_demo:
 else:
     n = len(s)
     cols += [np.array(["Unknown"] * n)] * 2 + [np.array(["Other/Unknown"] * n)]
+cols += [s.plausible.values if "plausible" in s.columns
+         else np.ones(len(s), dtype=bool)]
 
-for lon, lat, t0, t1, mb, pp, ag, sx, st in zip(*cols):
+for lon, lat, t0, t1, mb, pp, ag, sx, st, pl in zip(*cols):
     lo = np.asarray(lon, dtype=float)
     la = np.asarray(lat, dtype=float)
     if len(lo) < 2:
@@ -102,7 +105,8 @@ for lon, lat, t0, t1, mb, pp, ag, sx, st in zip(*cols):
                  bucket(pp, "purpose", "Other"),
                  bucket(ag, "age", "Unknown"),
                  bucket(sx, "sex", "Unknown"),
-                 bucket(st, "status", "Other/Unknown")))
+                 bucket(st, "status", "Other/Unknown"),
+                 1 if bool(pl) else 0))
     kept += 1
 
 meta_arr = np.asarray(meta, dtype=np.int32)

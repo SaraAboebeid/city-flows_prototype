@@ -199,6 +199,8 @@
     <button class="ctl spd" data-s="180" aria-pressed="true">3×</button>
     <button class="ctl spd" data-s="600" aria-pressed="false">10×</button>
     <button class="ctl" id="loadBtn" aria-pressed="false">STREET LOAD</button>
+    <button class="ctl" id="plausBtn" aria-pressed="false"
+            title="Cap trip distance at a mode-realistic maximum">PLAUSIBLE ONLY</button>
   </div>
   <div id="chartWrap">
     <div id="chartLabel">Trips under way</div>
@@ -239,7 +241,7 @@
   }
 
   // ---------- decode trips ----------
-  const M = 8;                                  // int32 per trip
+  const M = 9;                                  // int32 per trip
   const mb = b64(PAY.meta);
   const meta = new Int32Array(mb.buffer, mb.byteOffset, PAY.n*M);
   const cb = b64(PAY.coords);
@@ -297,9 +299,14 @@
     status:{names:PAY.status, slot:7, sel:new Set(PAY.status)}
   };
   let current = 8*3600, playing = true, speed = 180, showLoad = false;
+  let plausOnly = false;
   const TRAIL = 780;
 
+  // Trip duration in the source is sampled independently of the route, so
+  // implied speeds are meaningless. Distance is real, so the filter caps
+  // distance per mode - it removes 33.6% of walking trips and little else.
   function passesDemo(i){
+    if(plausOnly && meta[i*M+8] !== 1) return false;
     for(const k in filt){
       const f = filt[k];
       if(!f.sel.has(f.names[meta[i*M+f.slot]])) return false;
@@ -357,7 +364,8 @@
     const cbb = b64(LOAD.counts);
     const cnt = new Uint16Array(cbb.buffer, cbb.byteOffset, LOAD.nbin*LOAD.ncell);
     loadCells = {pos:pos32, cnt, nbin:LOAD.nbin, ncell:LOAD.ncell,
-                 hour0:LOAD.hour0, peak:LOAD.peak};
+                 hour0:LOAD.hour0, peak:LOAD.peak,
+                 radius:(LOAD.cell_m || 200) * 0.66};
   }
   const RAMP = [[12,22,34],[26,58,88],[38,110,132],[92,168,140],
                 [206,204,110],[255,214,120],[255,246,200]];
@@ -391,7 +399,8 @@
     bin = Math.max(0, Math.min(loadCells.nbin-1, bin));
     return new deck.ScatterplotLayer({
       id:"load", data:loadRows(bin), getPosition:d=>d.p,
-      radiusUnits:"meters", getRadius:130, stroked:false,
+      radiusUnits:"meters", getRadius:loadCells.radius, stroked:false,
+      radiusMinPixels:0.8,
       getFillColor:d=>d.c,
       updateTriggers:{getFillColor:[bin], getPosition:[bin]},
       parameters:{depthTest:false}
@@ -631,6 +640,12 @@
     showLoad=!showLoad;
     lb.setAttribute("aria-pressed", String(showLoad));
     render();
+  });
+  const pb = document.getElementById("plausBtn");
+  pb.addEventListener("click", ()=>{
+    plausOnly=!plausOnly;
+    pb.setAttribute("aria-pressed", String(plausOnly));
+    rebuild(); lastActive=countActive(); render(); paint();
   });
   window.addEventListener("resize", drawChart);
 

@@ -41,6 +41,34 @@ python 04_route_transit_network.py trips_routed.parquet trips_routed2.parquet 30
 - **Artifact** (`gbg_day.html`) — the Artifact sandbox blocks external tiles by
   CSP, so this build embeds vector water/road geometry instead.
 
+## Trip durations are not consistent with trip routes
+
+Verified in `tools/check_duration_fields.py` over 245,636 trips:
+
+- The activity schedule uses **`sampled_duration`** — it matches within 1 minute
+  **100%** of the time. `calculated_duration` matches only **1.9%**.
+- `calculated_duration` is not mode-aware: it implies a flat **12.0 km/h** for
+  car, bicycle, walking, taxi, moped and transportation service alike, and
+  ~3.5 km/h for the transit modes. It is distance ÷ a constant.
+
+So duration is drawn from a distribution and the route is generated separately;
+the two are never reconciled. **Implied speeds are meaningless** — walking
+reaches 1,198 km/h, car 1,881 km/h. Do not compute speed from this data.
+
+Distance *is* a real property of the geometry, so `10_flag_plausibility.py`
+caps distance per mode (`plausible` column, and the PLAUSIBLE ONLY button):
+
+| mode | trips | median km | max km | cap | dropped |
+|---|---|---|---|---|---|
+| Walking | 225,787 | 1.59 | 34.87 | 5 | **75,825 (33.6%)** |
+| Bicycle/E-bike | 137,319 | 4.64 | 38.69 | 25 | 409 (0.3%) |
+| all others | — | — | ≤46 | 45–80 | 0 |
+
+94.0% of trips pass. The problem is essentially confined to walking: mode looks
+to be assigned largely independently of distance, so some long trips are
+labelled Walking. Note these are also **visually over-represented** — a 20 km
+walk draws 20 km of line while a typical 0.7 km walk is a dot.
+
 ## Known limits
 
 - **Transit geometry is inferred.** The source has no route geometry for

@@ -19,13 +19,14 @@ if not os.path.exists(SRC):
     SRC = os.path.join(DER, "trips_routed2.parquet")
 OUT = os.path.join(DER, "load_grid.json")
 
-CELL = 200.0
+CELL = 100.0                      # metres; 100 m ~ street-block resolution
 X0, Y0 = 299000.0, 6383900.0
-NX, NY = 181, 167
+NX = int(np.ceil(36000 / CELL)) + 1
+NY = int(np.ceil(33400 / CELL)) + 1
 NCELL = NX * NY
 H0, H1 = 3, 23                    # hour bins, inclusive
 NBIN = H1 - H0 + 1
-BIG = 1_000_000                   # > NBIN * NCELL
+BIG = NBIN * NCELL + 1            # trip/key packing base
 
 to3006 = Transformer.from_crs("EPSG:4326", "EPSG:3006", always_xy=True)
 
@@ -97,6 +98,7 @@ pos = np.column_stack([np.round(np.asarray(clon) * 1e5),
                        np.round(np.asarray(clat) * 1e5)]).astype(np.int32)
 payload = {
     "cell_m": CELL,
+    "nx": NX, "ny": NY,
     "hour0": H0,
     "nbin": NBIN,
     "ncell": int(len(active)),
