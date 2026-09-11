@@ -34,9 +34,16 @@ Run in order. Stages 2–5 hit the network; 1, 3, 4 and 6 are CPU-bound.
 | 14 | `14_prep_flowmap.py` | packs flows (gzip blobs; 15-min cube for the busiest segments) | `flow_payload_*.json` |
 | 15 | `15_retrace_flow_sample.py` | 40,000 trips re-traced along the OSM streets — the moving trips in STREET FLOWS | `flow_sample.json` |
 | 16 | `16_export_js_version.py` | copies the page's payloads into the JavaScript version | `../gothenburg-day-js/data/` |
+| 20 | `20_fetch_flowsense.py` | downloads FlowSense Traffic Flows (Zenodo 16794871), md5-checked, unzipped | `<FLOWSENSE>/` |
+| 21 | `21_prep_flowsense.py` | Göteborg phone flows → undirected NVDB segments; 2023 counts → one table | `flowsense_gbg.parquet`, `groundtruth_gbg.parquet` |
+| 22 | `22_compare_flowsense.py` | matches phone segments and counts to our streets; correlations; page payload | `phone_payload.json`, `phone_compare.json` |
+| 23 | `23_prep_phone_views.py` | per-direction phone roads (moving particles) and the phone load grid on the synthetic 100 m grid | `phone_views.json` |
+| 24 | `24_time_profiles.py` | time-of-day profiles per speed class (see *The phone dashboard over the day*) | `time_profiles.json` |
+| 25 | `25_export_phone_dashboard.py` | copies the phone payloads, minus the synthetic-model fields, into the phone dashboard | `../gothenburg-phone-js/data/` |
 
 Re-running everything after new source data: 1 → 10 in order, then 11 → 14,
-then 7 (page) and 16 (JS version). Stage 11 caches Overpass tiles in
+then 7 (page) and 16 (JS version). The phone dashboard: 20 → 25 (stage 22 reads
+the outputs of stages 11–12, and stage 24 reads stage 10's). Stage 11 caches Overpass tiles in
 `<DATA>/_derived/osm_streets/`; delete that folder to refetch the network.
 
 Stage 4 takes arguments so it can be re-run with a wider snap radius:
@@ -62,6 +69,82 @@ thousands of grocery trips. This looks like destination choice weighted by
 building capacity without a cap. It is why Torslandavägen (141,547 trips/day)
 tops the flow map — faithful to the data, not to reality.
 
+## Phone data (FlowSense)
+
+**Data:** Teeuwen, R. & Gil, J. (2025). *FlowSense Traffic Flows — estimated
+from vehicle trajectories based on sparse mobile phone geolocation data.*
+Zenodo. <https://doi.org/10.5281/zenodo.16794871> (GPL-3.0). Method:
+Teeuwen, R. & Gil, J. (2025). *Estimating traffic flows from vehicle
+trajectories based on sparse mobile phone geolocation data.* NetMob 2025,
+Book of Abstracts, pp. 129–130, Paris. Ground truth shipped with the dataset:
+Trafikverket highway ADT and Göteborg Stad counts, 2023.
+
+What the data is: phone location fixes (GPS, Wi-Fi or fused, per the authors'
+extraction code) from 2024, chained into trips and map-matched to the
+Trafikverket (NVDB) network. Trips are split into (trip, road) crossings and
+**100,000 crossings are sampled at random per filter variant**; each road's
+number is how many sampled trips crossed it, per direction of travel. So each
+variant is its own draw (the ≥ 20 km/h count can exceed the all-speeds count
+on a road), the all-speeds variant includes walking and cycling, and **no time
+of day and no individual trips are published**. Two-way roads are stored per direction; stage 21
+sums them. 26% of roads have any trajectory; the median non-zero road has 2.
+So: rank comparisons only, and street-level comparison only where a road has
+≥ 5 crossings (7,232 roads).
+
+Results (Spearman ρ against the 2023 counts; `phone_compare.json`):
+
+| | all 419 counts | highway links | municipal points |
+|---|---|---|---|
+| phones, ≥ 20 km/h | 0.71 | 0.81 | 0.56 |
+| phones, all | 0.54 | 0.49 | 0.60 |
+| synthetic car trips | 0.19 | 0.28 | 0.26 |
+
+The phone flows reproduce the authors' result (very strong at highways with
+the 20 km/h filter), which also checks our geometry matching. The synthetic
+car flows agree weakly, and street by street they are essentially
+uncorrelated with the phone flows (ρ 0.06 on the 7,232 well-observed roads;
+within every speed class between −0.25 and 0.18). Evidence for why:
+
+- **Scope.** The synthetic population is Göteborg residents only (2019): no
+  inbound commuters, through traffic or freight. 23% of count sites — mostly
+  motorways such as the E6 south and Rv 40 — get *no* synthetic car trips; the
+  nearest street carrying any is a median 2.7 km away (`tools/diag_zero_and_roadclass.py`).
+- **Big roads under-weighted.** Synthetic trips are 36% of counted traffic on
+  streets under 2,000 vehicles/day but 5–9% on roads over 15,000.
+- **Torslanda over-loaded** (Hisingsleden: 84,687 synthetic vs 12,840 counted),
+  from the destination concentration above. Excluding it barely changes ρ.
+- 8.7% of synthetic car-km lands on OSM paths — either the source routed some
+  cars on paths, or stage 12's short-segment snapping picked a parallel path.
+
+**The phone dashboard** (`../gothenburg-phone-js/`) is separate from the
+synthetic population. The two sources differ in year, scope (residents only
+vs everyone with a phone), unit (trips vs sampled crossings) and mode, so they
+are not shown against each other. The dashboard uses the same style and encodings:
+moving particles, STREET LOAD (crossings per cell on the same 100 m grid,
+particles dimmed on top), STREET FLOWS (grey width per road plus particles),
+and the 2023 count sites. Particles move in each road's real direction (the two
+directions differ on 86.5% of roads; the busier takes a median 64%), in
+proportion to the directional count: **direction and relative volume are
+real, timing is illustrative**. Phones carry no mode, purpose or demographics,
+so there is one colour. Stage 22 still computes the synthetic-vs-phone
+statistics above; stage 25 leaves them out of the dashboard's data.
+
+**The phone dashboard over the day.** The phone data has no time of day, so
+its daily rhythm is borrowed from a switchable source (panel: *Time of day
+from*) and applied per speed-limit class. The volumes stay the phones':
+
+| source | what it is | caveat |
+|---|---|---|
+| Stockholm hourly, fitted | median hourly shape of 19,548 Trafikverket Årstrafik links measured 2015–2024, rescaled per class to Göteborg's 2023 06–18 / 18–22 / 22–06 split | Stockholm's hour-by-hour shape; the Stockholm file records no speed limits, so one shape for all classes |
+| Göteborg 3 periods | Göteborg's own 2023 highway counts (131 links): day 77.9%, evening 14.3%, night 7.8% | only three steps a day, no rush-hour peaks |
+| No timing | whole-sample totals | the clock does not change the map |
+
+Stage 24 also writes a *synthetic rhythm* profile (the synthetic population's
+car trips under way). Stage 25 drops it, because it would tie the phone data
+back to the model. Göteborg's own hourly counts from Trafikverket (Lastkajen or
+the open API) would be a better source, but they need a Trafikverket account
+or API key.
+
 ## Outputs
 
 - **`../gothenburg-day/index.html`** — the single-file page (animation, street
@@ -70,6 +153,9 @@ tops the flow map — faithful to the data, not to reality.
 - **`../gothenburg-day-js/`** — the same page as a plain-JavaScript codebase (ES
   modules, data in separate files). Run `python serve.py` inside it; see
   `../gothenburg-day-js/README.md`.
+- **`../gothenburg-phone-js/`** — the separate phone-data (FlowSense)
+  dashboard, same style. Run `python serve.py` inside it; see
+  `../gothenburg-phone-js/README.md`.
 
 `template.html` keeps a `USE_TILES` switch and vector-basemap fallback from an
 earlier sandboxed build; `07_assemble.py` now always builds the tiled page.
@@ -77,8 +163,8 @@ earlier sandboxed build; `07_assemble.py` now always builds the tiled page.
 **Basemap API key.** CARTO tiles need a free key (carto.com/basemaps/apikey),
 otherwise they show an "API KEY REQUIRED" watermark. Paste it into
 `../carto_api_key.txt` (or set the `CARTO_API_KEY` environment variable), then
-re-run stages 7 and 16. The file is in `.gitignore`, but the key is embedded in
-`gothenburg-day/index.html` and in `gothenburg-day-js/config.json` — restrict it
+re-run stages 7, 16 and 25. The file is in `.gitignore`, but the key is embedded in
+`gothenburg-day/index.html` and in the two dashboards' `config.json` — restrict it
 to your domain in the CARTO dashboard before publishing, and think twice before
 committing the built page.
 

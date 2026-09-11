@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Göteborg Phone Flows</title>
+<meta name="description" content="Traffic flows in Göteborg estimated from sparse mobile-phone location data (FlowSense, 2024).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.14/dist.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="title" class="overlay">
+  <div class="eyebrow">FlowSense · Phone data 2024</div>
+  <h1>Traffic flows from phone data in Göteborg</h1>
+  <p id="subtitle">Movement estimated from sparse mobile-phone location fixes, chained into trips and
+    matched to Trafikverket's road network. Each road counts how many sampled trips crossed it,
+    per direction of travel.</p>
+  <p id="cite">
+    Teeuwen &amp; Gil (2025). <em>FlowSense Traffic Flows — estimated from vehicle
+    trajectories based on sparse mobile phone geolocation data.</em> Zenodo.
+    <a href="https://doi.org/10.5281/zenodo.16794871"
+       target="_blank" rel="noopener">doi.org/10.5281/zenodo.16794871</a>
+    · Method: Teeuwen &amp; Gil (2025), NetMob 2025, pp. 129–130.
+  </p>
+</div>
+
+<aside id="panel" class="overlay">
+  <div class="group">
+    <h2 class="grouphead">Layers</h2>
+    <div id="layers"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Sample</h2>
+    <div class="seg" id="sampleSeg">
+      <button data-s="all" aria-pressed="true">ALL SPEEDS</button>
+      <button data-s="v20" aria-pressed="false">≥ 20 KM/H</button>
+    </div>
+    <div class="cap" id="sampleNote"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Time of day from</h2>
+    <div class="chips" id="timingChips">
+      <button class="chip" data-t="sthlm_fit" aria-pressed="true">Stockholm hourly, fitted</button>
+      <button class="chip" data-t="gbg3" aria-pressed="false">Göteborg 3 periods</button>
+      <button class="chip" data-t="none" aria-pressed="false">No timing</button>
+    </div>
+    <div id="curve"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Against 2023 traffic counts</h2>
+    <div id="quality"></div>
+  </div>
+</aside>
+
+<div id="note" class="overlay">The phone data has no time of day and no individual trips:
+  particle timing is illustrative, and the daily rhythm is borrowed from measured
+  traffic counts per speed-limit class. Volumes and directions are the phones'.<br><br>
+  Traffic counts: Trafikverket and Göteborg Stad, 2023.
+  Basemap © OpenStreetMap contributors © CARTO.</div>
+
+<div id="bar" class="overlay">
+  <div>
+    <div id="clock" class="mono">08:00<span class="z">CET</span></div>
+    <div id="active">—</div>
+  </div>
+  <div class="controls">
+    <button class="ctl" id="play" aria-pressed="true">PAUSE</button>
+    <button class="ctl spd" data-s="60" aria-pressed="false">1×</button>
+    <button class="ctl spd" data-s="180" aria-pressed="true">3×</button>
+    <button class="ctl spd" data-s="600" aria-pressed="false">10×</button>
+  </div>
+  <div id="chartWrap">
+    <div id="chartLabel">Traffic through the day</div>
+    <canvas id="chart"></canvas>
+    <div id="axis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+  </div>
+</div>
+
+<div id="loading">UNPACKING PHONE FLOWS…</div>
+
+</body>
+</html>
