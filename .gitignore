@@ -1,0 +1,7 @@
+# CARTO basemap API key - never commit it
+carto_api_key.txt
+gothenburg-day-js/config.json
+
+# Python bytecode
+__pycache__/
+*.pyc

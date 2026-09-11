@@ -1,0 +1,4 @@
+{
+ "subtitle": "1,277,670 trips made by a synthetic population of 575,753 residents, replayed across one 2019 weekday. A 45,000-trip sample is drawn here, in proportion to how each mode is actually used.",
+ "note": "Car, cycling and walking trips follow the routed street paths supplied with the dataset. Tram, bus and ferry trips carry no geometry in the source, so they are matched onto OpenStreetMap transit lines — 70% succeeded; the rest are drawn straight and should not be read as real paths.<br><br>Coordinates SWEREF99 TM → WGS84. Basemap © OpenStreetMap contributors © CARTO."
+}

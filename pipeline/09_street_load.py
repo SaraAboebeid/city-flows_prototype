@@ -41,8 +41,10 @@ for batch in pf.iter_batches(batch_size=40000,
     lon_a = batch.column("lon")
     lat_a = batch.column("lat")
     off = np.asarray(lon_a.offsets)
-    flon = np.asarray(lon_a.values)
-    flat_ = np.asarray(lat_a.values)
+    # a batch can be a slice of a larger buffer: take only its own range
+    flon = np.asarray(lon_a.values)[off[0]:off[-1]]
+    flat_ = np.asarray(lat_a.values)[off[0]:off[-1]]
+    off = off - off[0]
     t0 = np.asarray(batch.column("t_start"))
     t1 = np.asarray(batch.column("t_end"))
 

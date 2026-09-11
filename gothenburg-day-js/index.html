@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Göteborg 24h</title>
+<meta name="description" content="An animated 24-hour replay of trips from the Gothenburg activity-based synthetic population, with street flows.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.14/dist.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="title" class="overlay">
+  <div class="eyebrow">GAPSIM · Synthetic population 2019</div>
+  <h1>A day of movement in Göteborg</h1>
+  <p id="subtitle"></p>
+  <p id="cite">
+    Somanath, Thuvander, Gil &amp; Hollberg (2024).
+    <em>Activity-based simulations for neighbourhood planning towards
+    social-spatial equity.</em>
+    Computers, Environment and Urban Systems 111, 102242.
+    <a href="https://doi.org/10.1016/j.compenvurbsys.2024.102242"
+       target="_blank" rel="noopener">doi.org/10.1016/j.compenvurbsys.2024.102242</a>
+  </p>
+</div>
+
+<aside id="panel" class="overlay">
+  <div class="group">
+    <h2 class="grouphead">Colour by</h2>
+    <div class="seg" id="dimseg">
+      <button data-dim="mode" aria-pressed="true">MODE</button>
+      <button data-dim="purpose" aria-pressed="false">PURPOSE</button>
+    </div>
+    <div id="cats"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Age band</h2>
+    <div class="chips" id="fAge"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Sex</h2>
+    <div class="chips" id="fSex"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Main activity</h2>
+    <div class="chips" id="fStatus"></div>
+  </div>
+  <div class="group" id="flowGroup" hidden>
+    <h2 class="grouphead">Street flows</h2>
+    <div id="flowLegend"></div>
+  </div>
+</aside>
+
+<div id="note" class="overlay"></div>
+
+<div id="bar" class="overlay">
+  <div>
+    <div id="clock" class="mono">08:00<span class="z">CET</span></div>
+    <div id="active">— trips moving</div>
+  </div>
+  <div class="controls">
+    <button class="ctl" id="play" aria-pressed="true">PAUSE</button>
+    <button class="ctl spd" data-s="60" aria-pressed="false">1×</button>
+    <button class="ctl spd" data-s="180" aria-pressed="true">3×</button>
+    <button class="ctl spd" data-s="600" aria-pressed="false">10×</button>
+    <button class="ctl" id="loadBtn" aria-pressed="false">STREET LOAD</button>
+    <button class="ctl" id="flowBtn" aria-pressed="false" disabled
+            title="Trips projected onto the OpenStreetMap street segments they use">STREET FLOWS</button>
+    <button class="ctl" id="flowDayBtn" aria-pressed="false" hidden
+            title="Street flows for the whole day instead of the current 15 minutes">WHOLE DAY</button>
+    <button class="ctl" id="plausBtn" aria-pressed="false"
+            title="Cap trip distance at a mode-realistic maximum">PLAUSIBLE ONLY</button>
+  </div>
+  <div id="chartWrap">
+    <div id="chartLabel">Trips under way</div>
+    <canvas id="chart"></canvas>
+    <div id="axis"><span>03:00</span><span>08:00</span><span>13:00</span><span>18:00</span><span>23:00</span></div>
+  </div>
+</div>
+
+<div id="loading">DECODING TRIPS…</div>
+
+</body>
+</html>
