@@ -24,7 +24,10 @@ import { nramp, rampColor } from "./colors.js";
 // zoom and the busy ones stand out; zooming in widens everything (zoomScale)
 const FMINW = 0.6, FMAXW = 10;                           // street-flow width, px at city zoom
 const PMINW = 1.4, PMAXW = 5;                            // particle width, px at city zoom
-const V_MS = 120, PERIOD = 40, TRAIL = 0.55, PARTICLES = 45000;
+// PERIOD: each particle re-enters its road every 12 s; a short road takes
+// ~1-2 s to cross, so the loop sets how many particles are on screen at once
+const V_MS = 120, PERIOD = 12, TRAIL = 0.55, PARTICLES = 45000;
+const GROUND = [14, 16, 20];                             // the CARTO dark basemap, roughly
 const QUANTUM = 300;                                     // re-evaluate timing every 5 sim-minutes
 const PARTICLE = [255, 236, 190];
 export const CURVE = { sthlm_fit: [79, 195, 247], gbg3: [93, 211, 158] };
@@ -166,8 +169,10 @@ export function compute(){
   for(let i=0;i<R.n;i++){
     const o = obs[i] * F[R.cls[i]];
     if(o <= 0){ R.wid[i] = 0; R.col[i*4+3] = 0; continue; }
-    const q = Math.min(1, o/ref), c = nramp(Math.sqrt(q));
-    R.col.set([c[0],c[1],c[2],70+Math.round(130*q)], i*4);
+    // solid colour, pre-blended onto the dark ground: overlapping road pieces
+    // would otherwise stack their transparency into bright beads
+    const q = Math.min(1, o/ref), c = nramp(Math.sqrt(q)), a = (70 + 130*q) / 255;
+    R.col.set([GROUND[0]+(c[0]-GROUND[0])*a, GROUND[1]+(c[1]-GROUND[1])*a, GROUND[2]+(c[2]-GROUND[2])*a, 255], i*4);
     R.wid[i] = FMINW + (FMAXW-FMINW)*q;
   }
   // load cells, as in the synthetic STREET LOAD
