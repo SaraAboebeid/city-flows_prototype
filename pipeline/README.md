@@ -38,8 +38,14 @@ Run in order. Stages 2–5 hit the network; 1, 3, 4 and 6 are CPU-bound.
 | 21 | `21_prep_flowsense.py` | Göteborg phone flows → undirected NVDB segments; 2023 counts → one table | `flowsense_gbg.parquet`, `groundtruth_gbg.parquet` |
 | 22 | `22_compare_flowsense.py` | matches phone segments and counts to our streets; correlations; page payload | `phone_payload.json`, `phone_compare.json` |
 | 23 | `23_prep_phone_views.py` | per-direction phone roads (moving particles) and the phone load grid on the synthetic 100 m grid | `phone_views.json` |
-| 24 | `24_time_profiles.py` | time-of-day profiles per speed class (see *The phone dashboard over the day*) | `time_profiles.json` |
-| 25 | `25_export_phone_dashboard.py` | copies the phone payloads, minus the synthetic-model fields, into the phone dashboard | `../gothenburg-phone-js/data/` |
+| 24 | `24_time_profiles.py` | time-of-day profiles per speed class — **no longer used by any dashboard**, see below | `time_profiles.json` |
+| ~~25~~ | *removed* | the phone dashboard now takes everything from stage 30 | |
+| 26 | `26_compare_corridors.py` | aggregates both sources to corridors (OSM street names) and compares them with each other and the 2023 counts | `corridors.csv`, `corridor_compare.json` |
+| 27 | `27_export_corridors.py` | packs the corridors and their segment geometry for the corridor map | `../gothenburg-corridors-js/data/` |
+| 28 | `28_prep_speed_sweep.py` | all nine FlowSense speed filters per road, the slow-traffic index and Poisson uncertainty | `flowsense_sweep.parquet`, `flowsense_sweep_roads.parquet` |
+| 29 | `29_network_centrality.py` | betweenness centrality on the Trafikverket graph, and observed flow against it | `flowsense_centrality.parquet`, `flowsense_betweenness.parquet` (cache) |
+| 30 | `30_export_phone_sweep.py` | packs the sweep, the uncertainty table and the residual for the phone dashboard | `../gothenburg-phone-js/data/sweep.json` |
+| 31 | `31_street_design.py` | OSM lane counts and street class onto each phone road: traffic per lane, slow traffic by street type | `flowsense_street_design.parquet`, `street_design.json` |
 
 Re-running everything after new source data: 1 → 10 in order, then 11 → 14,
 then 7 (page) and 16 (JS version). The phone dashboard: 20 → 25 (stage 22 reads
@@ -129,9 +135,14 @@ real, timing is illustrative**. Phones carry no mode, purpose or demographics,
 so there is one colour. Stage 22 still computes the synthetic-vs-phone
 statistics above; stage 25 leaves them out of the dashboard's data.
 
-**The phone dashboard over the day.** The phone data has no time of day, so
-its daily rhythm is borrowed from a switchable source (panel: *Time of day
-from*) and applied per speed-limit class. The volumes stay the phones':
+**Time of day: dropped.** The phone dashboard used to borrow a daily rhythm so
+the map could animate across a day. That was removed in September 2026: the
+data has no time of day, no trip start and no trip end, and a running clock
+implied otherwise however it was labelled. Stage 24 still computes the profiles
+below and nothing consumes them — keep it if a future dataset brings real
+hours, otherwise it can go.
+
+The profiles it writes, for the record:
 
 | source | what it is | caveat |
 |---|---|---|
@@ -144,6 +155,123 @@ car trips under way). Stage 25 drops it, because it would tie the phone data
 back to the model. Göteborg's own hourly counts from Trafikverket (Lastkajen or
 the open API) would be a better source, but they need a Trafikverket account
 or API key.
+
+## Corridor comparison (stage 26)
+
+Segment by segment the two sources barely agree (ρ 0.06), and both sides are
+noisy there. Stage 26 tests whether aggregating to **corridors** — all segments
+sharing an OSM street name, length-weighted so long corridors are not favoured
+— recovers agreement. **It does not.** Across the 372 corridors the phones
+observed well (≥ 20 sampled crossings, ≥ 400 m):
+
+| | corridors | ρ synthetic vs phones | ρ vs 2023 counts |
+|---|---|---|---|
+| all well-observed corridors | 372 | −0.08 | synthetic 0.17 · phones 0.63 |
+| only where the model has car traffic | 253 | +0.14 (+0.30 vs all-speed phones) | synthetic 0.19 · phones 0.59 |
+
+Aggregation does not help because the disagreement is structural, not noise:
+
+- **A third of the busiest corridors carry no synthetic traffic at all.** 119 of
+  the 372 have zero synthetic car trips, including E6 south (Kungsbackaleden,
+  25,710 counted vehicles/day), Gamla Riksvägen (29,836) and Ekenleden (23,832).
+  This is scope, not a matching failure: motorways do carry synthetic traffic
+  elsewhere (49% of motorway segments; E6 north peaks at 18,269 trips/day).
+  Trips that leave the municipality are not in the source data.
+- **Torslanda is over-loaded**, from the destination concentration above:
+  Sörredsvägen takes 61.9‰ of synthetic vehicle-km against 1.5‰ of the phones',
+  and Assar Gabrielssons Väg 16.9‰ against 0.9‰ (2,468 counted vehicles/day).
+- **The main ring roads do agree**: Marieholmsleden 37‰ vs 38‰,
+  Västerleden 74‰ vs 46‰, Dag Hammarskjöldsleden 17‰ vs 13‰.
+
+Reading: the phones rank corridors much like the real counts (ρ ~0.6), the
+synthetic model does not (ρ ~0.2), and that gap is the same at segment and
+corridor level. The comparison therefore measures the model's scope — resident
+trips only, 2019, no through traffic, freight or inbound commuters — rather
+than a disagreement that better aggregation could resolve.
+
+`corridors.csv` holds all 2,893 corridors with both sources' means, shares and
+the log2 ratio, for inspection. Caveats: one OSM name can cover disjoint
+streets, and 25% of phone segments sit on unnamed roads and are left out.
+
+Stage 27 packs the result for **`../gothenburg-corridors-js/`**, a map of the
+comparison (violet = the model misses the corridor, ember = it over-loads it).
+The full method is written up in `../gothenburg-corridors-js/METHOD.md`.
+
+## The speed sweep, uncertainty and network position (stages 28–30)
+
+Three things the phone data can say on its own, without the synthetic model.
+
+**Nine speed filters, not two.** FlowSense publishes a trajectory count per road
+for every minimum average speed from 0 to 20 km/h in 2.5 steps. Each one is its
+own random draw of 100,000 crossings from the trips that fast — they are *not*
+nested subsets, so a road's count can rise as the filter tightens. Sweeping the
+filter moves the map from all movement to motor traffic only, and the pattern
+really does change: rank correlation with the all-speeds map falls from 0.72 at
+≥ 5 km/h to 0.57 at ≥ 20 km/h, and the roads reached fall from 21,888 to 16,082.
+
+The **slow-traffic index** (a road's share of the all-speeds draw ÷ its share of
+the ≥ 20 km/h draw) reads as it should, which is the check that it means
+anything:
+
+| posted limit | 40 | 50 | 60 | 70 | 80 | 100 |
+|---|---|---|---|---|---|---|
+| median index | 2.50 | 2.17 | 1.33 | 0.55 | 0.26 | 0.20 |
+
+Above 1 = relatively more slow traffic (walking, cycling); below = motor traffic.
+
+**Sampling noise.** 100,000 crossings spread over 32,453 roads leaves most of
+them thin: 25,123 roads (77%) carry fewer than 5 crossings, and the median
+counted road has a relative standard error of 58%. Stage 28 stores exact
+Poisson 95% intervals (4 crossings means 1.1–10.2), which the dashboard shows
+in tooltips and uses to fade or hide roads too thin to rank.
+
+**Network position.** Stage 29 builds the Trafikverket network shipped with
+FlowSense as an undirected graph (56,339 nodes, 63,925 edges) and estimates
+betweenness centrality from 400 sampled source nodes: shortest-path trees, then
+every edge on the way back from each reachable node is credited. Observed flow
+against centrality gives Spearman **0.53** across all roads the phones saw
+(0.37 for the ≥ 20 km/h draw) — structure explains a good part of where traffic
+is, but far from all of it. The mapped quantity is the rank difference (traffic
+percentile − centrality percentile), which is unbiased for the well-observed
+subset in a way a fitted residual is not; ember on the map is a road busier
+than its position in the network predicts.
+
+Betweenness takes ~3 minutes and is cached in `flowsense_betweenness.parquet`;
+delete that file to recompute.
+
+## Street size and street design (stage 31)
+
+**Traffic per lane.** OpenStreetMap tags a width in metres on only 2% of
+drivable roads, but a lane count on **71% of main roads** — and main roads are
+where the phone sample is thick enough to trust anyway. Stage 31 reads the tags
+straight from the Overpass tiles stage 11 cached (they kept every tag, so
+nothing is re-downloaded), joins them to our segments by OSM way id, and snaps
+each phone road onto a segment: 27,799 of 32,453 roads matched (86%), 8,446
+with a lane count. Median sampled crossings per driving lane:
+
+| motorway | trunk | motorway link | primary | secondary | tertiary |
+|---|---|---|---|---|---|
+| 14 | 13 | 11 | 8.5 | 5 | 4 |
+
+Lane count against traffic is a weak ρ 0.24 — street size predicts far less
+than you would expect, which is the interesting part.
+
+**Slow traffic by street type**, using the slow index from stage 28:
+
+| service | residential | tertiary | secondary | trunk | motorway |
+|---|---|---|---|---|---|
+| 5.00 | 2.50 | 2.16 | 1.80 | 0.33 | 0.31 |
+
+**What could not be done: cycling and walking.** There is no mode in the phone
+data, and worse, Göteborg maps its cycle network as *separate* ways
+(`highway=cycleway`/`path`), while FlowSense's network is Trafikverket's road
+network — every edge in it is labelled `unclassified`. Actual cycle
+infrastructure is tagged on 0–1% of road ways (the common `cycleway:both` tag
+on main roads almost always reads `no`), so only **33 of 7,330** well-observed
+phone roads have any, 151 a sidewalk and 19 on-street parking. Far too few to
+compare, so stage 31 records the coverage and draws no conclusion. The speed
+filters remain a speed split, never a mode split: slow mixes walking, cycling
+and congested driving.
 
 ## Outputs
 

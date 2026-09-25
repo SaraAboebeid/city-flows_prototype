@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Göteborg Corridors</title>
+<meta name="description" content="Göteborg's traffic corridors: the synthetic population's car trips against phone-based flows and 2023 traffic counts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.14/dist.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="title" class="overlay">
+  <div class="eyebrow">Corridors · model vs phones</div>
+  <h1>Which corridors the model misses</h1>
+  <p id="subtitle">Every segment sharing a street name is one corridor. Each side is averaged along it,
+    weighted by length, so this is traffic <em>along the route</em> — not how many segments it happens to have.</p>
+  <p id="cite">
+    Synthetic population: Somanath, Thuvander, Gil &amp; Hollberg (2024).
+    <a href="https://doi.org/10.1016/j.compenvurbsys.2024.102242" target="_blank" rel="noopener">doi.org/10.1016/j.compenvurbsys.2024.102242</a>
+    · Phone flows: Teeuwen &amp; Gil (2025), FlowSense, Zenodo.
+    <a href="https://doi.org/10.5281/zenodo.16794871" target="_blank" rel="noopener">doi.org/10.5281/zenodo.16794871</a>
+    · Counts: Trafikverket and Göteborg Stad, 2023.
+  </p>
+</div>
+
+<aside id="panel" class="overlay">
+  <div class="group">
+    <h2 class="grouphead">Colour by</h2>
+    <div class="seg" id="colorSeg">
+      <button data-c="ratio" aria-pressed="true">DIFFERENCE</button>
+      <button data-c="syn" aria-pressed="false">MODEL</button>
+      <button data-c="phone" aria-pressed="false">PHONES</button>
+    </div>
+    <div id="legend"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Show</h2>
+    <div class="chips" id="showChips">
+      <button class="chip" data-k="onlyWell" aria-pressed="true">Well-observed only</button>
+      <button class="chip" data-k="counts" aria-pressed="true">Count sites 2023</button>
+    </div>
+    <div class="cap" id="showNote"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Rank agreement</h2>
+    <div id="agree"></div>
+  </div>
+  <div class="group">
+    <h2 class="grouphead">Busiest corridors <span class="hint">by phone traffic</span></h2>
+    <div id="list"></div>
+  </div>
+</aside>
+
+<div id="note" class="overlay">A corridor is every drivable segment carrying one OSM street name, so one
+  name spread across the city becomes one corridor. 25% of phone segments sit on unnamed roads and are left out.<br><br>
+  Basemap © OpenStreetMap contributors © CARTO.</div>
+
+<div id="bar" class="overlay">
+  <div id="detail">
+    <div id="dName">Pick a corridor</div>
+    <div id="dSub">Click one on the map, or in the list on the right.</div>
+  </div>
+  <div id="figures"></div>
+</div>
+
+<div id="loading">UNPACKING CORRIDORS…</div>
+
+</body>
+</html>

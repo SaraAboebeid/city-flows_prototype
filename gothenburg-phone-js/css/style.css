@@ -1,11 +1,11 @@
-/* Same instrument style as the synthetic-population dashboard. */
+/* Same instrument style as the other dashboards, at a larger, readable size. */
 html{color-scheme:dark}
 img{max-width:100%}
 [hidden]{display:none!important}
 
 :root{
-  --ground:#080D13; --panel:#0E1720; --panel-edge:#1D2C39;
-  --ink:#DCE6F0; --ink-dim:#8195A8; --ink-faint:#55697C;
+  --ground:#080D13; --panel:#0E1720; --panel-edge:#22354A;
+  --ink:#EAF1F8; --ink-dim:#9DB1C4; --ink-faint:#6E8397;
   --accent:#4FC3F7; --phone:rgb(255,236,190);
   --s1:6px; --s2:10px; --s3:16px; --s4:24px;
 }
@@ -19,25 +19,26 @@ body{
 canvas{outline:none}
 .overlay{position:absolute; z-index:5; pointer-events:none}
 .overlay > *{pointer-events:auto}
-.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
 
-#title{top:var(--s4); left:var(--s4); max-width:330px}
+#title{top:var(--s4); left:var(--s4); max-width:390px; pointer-events:auto}
 #title h1{
   font-family:"IBM Plex Sans Condensed","Segoe UI",sans-serif;
-  font-weight:700; font-size:29px; line-height:1.05; margin:0;
+  font-weight:700; font-size:34px; line-height:1.05; margin:0;
   letter-spacing:-.01em; text-wrap:balance;
 }
 #title .eyebrow{
-  font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+  font-family:"IBM Plex Mono",monospace; font-size:12px;
   letter-spacing:.16em; text-transform:uppercase;
   color:var(--accent); margin-bottom:var(--s2);
 }
-#title p{
-  margin:var(--s2) 0 0; font-size:12.5px; line-height:1.5;
-  color:var(--ink-dim);
+#title p{margin:var(--s2) 0 0; font-size:15px; line-height:1.55; color:var(--ink-dim)}
+#byline{
+  font-family:"IBM Plex Mono",monospace; font-size:12.5px; letter-spacing:.04em;
+  color:var(--ink-dim); margin:var(--s3) 0 0;
 }
+#byline b{color:var(--ink); font-weight:500}
 #cite{
-  font-size:10.5px; line-height:1.55; color:var(--ink-faint);
+  font-size:12px; line-height:1.6; color:var(--ink-faint);
   border-left:2px solid var(--panel-edge); padding-left:var(--s2);
   margin-top:var(--s3);
 }
@@ -48,141 +49,117 @@ canvas{outline:none}
 
 /* ---- right panel ---- */
 #panel{
-  top:var(--s4); right:var(--s4); width:236px;
-  max-height:calc(100vh - 220px); overflow-y:auto;
-  background:color-mix(in srgb, var(--panel) 90%, transparent);
-  border:1px solid var(--panel-edge); border-radius:3px;
-  padding:var(--s3); backdrop-filter:blur(8px);
+  top:var(--s4); right:var(--s4); width:320px;
+  max-height:calc(100vh - 2 * var(--s4)); overflow-y:auto;
+  background:color-mix(in srgb, var(--panel) 92%, transparent);
+  border:1px solid var(--panel-edge); border-radius:4px;
+  padding:var(--s3) var(--s3) var(--s2);
+  backdrop-filter:blur(8px);
   scrollbar-width:thin; scrollbar-color:var(--panel-edge) transparent;
 }
 .grouphead{
-  font-family:"IBM Plex Mono",monospace; font-size:9.5px; font-weight:500;
-  letter-spacing:.15em; text-transform:uppercase; color:var(--ink-faint);
+  font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:500;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint);
   margin:0 0 var(--s2);
 }
-.group + .group{margin-top:var(--s3);
-  padding-top:var(--s3); border-top:1px solid var(--panel-edge)}
+.grouphead .hint{letter-spacing:.04em; text-transform:none; color:var(--ink)}
+.group + .group{margin-top:var(--s3); padding-top:var(--s3); border-top:1px solid var(--panel-edge)}
 
 .seg{display:flex; gap:0; margin-bottom:var(--s2)}
 .seg button{
-  flex:1; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
-  letter-spacing:.08em; padding:6px 0; cursor:pointer;
-  background:transparent; color:var(--ink-dim);
-  border:1px solid var(--panel-edge);
+  flex:1; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  letter-spacing:.04em; padding:8px 0; cursor:pointer;
+  background:transparent; color:var(--ink-dim); border:1px solid var(--panel-edge);
 }
 .seg button + button{border-left:0}
 .seg button:first-child{border-radius:2px 0 0 2px}
 .seg button:last-child{border-radius:0 2px 2px 0}
-.seg button[aria-pressed="true"]{
-  background:var(--accent); color:var(--ground); border-color:var(--accent)}
+.seg button[aria-pressed="true"]{background:var(--accent); color:var(--ground); border-color:var(--accent)}
+.seg button:hover{color:var(--ink)}
 .seg button:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
 
-/* layer switches: same rows as the synthetic dashboard's categories */
+/* the question the chosen colouring answers */
+#modeQ{
+  font-family:"IBM Plex Sans Condensed","Segoe UI",sans-serif;
+  font-size:17px; font-weight:600; line-height:1.25; color:var(--ink);
+  margin:var(--s2) 0 0; text-wrap:balance;
+}
+
+.sweep{display:flex; align-items:center; gap:var(--s2)}
+.ctl{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.06em;
+  background:transparent; color:var(--ink-dim);
+  border:1px solid var(--panel-edge); border-radius:2px;
+  padding:7px 11px; cursor:pointer; flex:none;
+}
+.ctl:hover{color:var(--ink); border-color:var(--ink-faint)}
+.ctl[aria-pressed="true"]{color:var(--ground); background:var(--accent); border-color:var(--accent)}
+.ctl:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
+input[type=range]{
+  flex:1; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px;
+  background:linear-gradient(90deg,var(--panel-edge),var(--phone)); cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%;
+  background:var(--ink); border:2px solid var(--ground); cursor:pointer;
+}
+input[type=range]::-moz-range-thumb{
+  width:14px; height:14px; border-radius:50%; background:var(--ink);
+  border:2px solid var(--ground); cursor:pointer;
+}
+input[type=range]:focus-visible{outline:1.5px solid var(--accent); outline-offset:3px}
+
+/* layer switches */
 .cat{
-  display:grid; grid-template-columns:10px 1fr auto; align-items:center;
-  gap:var(--s2); width:100%; padding:4px 0; background:none; border:0;
-  color:var(--ink); font:inherit; font-size:12px; cursor:pointer;
-  text-align:left;
+  display:grid; grid-template-columns:12px 1fr auto; align-items:center;
+  gap:var(--s2); width:100%; padding:7px 0; background:none; border:0;
+  color:var(--ink); font:inherit; font-size:14.5px; cursor:pointer; text-align:left;
 }
 .cat:hover{color:#fff}
 .cat:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
-.cat .sw{width:10px; height:10px; border-radius:2px; flex:none}
-.cat .n{font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+.cat .sw{width:12px; height:12px; border-radius:3px; flex:none}
+.cat .n{font-family:"IBM Plex Mono",monospace; font-size:12px;
   font-variant-numeric:tabular-nums; color:var(--ink-dim)}
-.cat[aria-pressed="false"]{opacity:.3}
+.cat[aria-pressed="false"]{opacity:.42}
 .cat[aria-pressed="false"] .sw{background:transparent!important;
-  box-shadow:inset 0 0 0 1.5px currentColor}
-.layerbody{margin:2px 0 var(--s2) 20px}
+  box-shadow:inset 0 0 0 2px currentColor}
+.layerbody{margin:2px 0 var(--s3) 24px}
 .layerbody svg{display:block; width:100%; height:auto; overflow:visible}
 
-.chips{display:flex; flex-wrap:wrap; gap:5px}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
 .chip{
-  font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.04em;
-  padding:4px 8px; border-radius:2px; cursor:pointer;
-  background:transparent; color:var(--ink-dim);
-  border:1px solid var(--panel-edge);
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; letter-spacing:.02em;
+  padding:6px 10px; border-radius:2px; cursor:pointer;
+  background:transparent; color:var(--ink-dim); border:1px solid var(--panel-edge);
 }
 .chip[aria-pressed="true"]{color:var(--ink); border-color:var(--ink-faint);
-  background:color-mix(in srgb, var(--accent) 14%, transparent)}
+  background:color-mix(in srgb, var(--accent) 16%, transparent)}
+.chip:hover{color:var(--ink)}
 .chip:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
 
-.cap{font-family:"IBM Plex Mono",monospace; font-size:9.5px;
-  color:var(--ink-dim); margin-top:6px; line-height:1.5}
-.cap b{color:var(--ink); font-weight:500}
+.cap{font-family:"IBM Plex Sans",sans-serif; font-size:12.5px;
+  color:var(--ink-dim); margin-top:8px; line-height:1.6}
+.cap b{color:var(--ink); font-weight:600}
 .cap a{color:var(--accent); text-decoration:none}
-#legend svg, #curve svg{display:block; width:100%; height:auto; overflow:visible}
-#curve svg{margin-top:4px}
 
 table.rho{width:100%; border-collapse:collapse; margin-top:var(--s2);
-  font-family:"IBM Plex Mono",monospace; font-size:10px;
+  font-family:"IBM Plex Mono",monospace; font-size:12px;
   font-variant-numeric:tabular-nums}
-table.rho caption{text-align:left; font-size:9px; letter-spacing:.12em;
-  text-transform:uppercase; color:var(--ink-faint); padding-bottom:5px}
-table.rho th{font-weight:500; color:var(--ink-faint); text-align:right; padding:3px 0 3px 6px}
+table.rho caption{text-align:left; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-faint); padding-bottom:6px}
+table.rho th{font-weight:500; color:var(--ink-faint); text-align:right; padding:4px 0 4px 8px}
 table.rho th:first-child, table.rho td:first-child{text-align:left; padding-left:0}
-table.rho td{text-align:right; padding:3px 0 3px 6px; color:var(--ink);
+table.rho td{text-align:right; padding:4px 0 4px 8px; color:var(--ink);
   border-top:1px solid var(--panel-edge)}
-table.rho td i{display:inline-block; width:7px; height:7px; border-radius:2px;
-  margin-right:5px; vertical-align:0}
 
-/* ---- bottom bar ---- */
-#bar{
-  left:var(--s4); right:var(--s4); bottom:var(--s4);
-  display:grid; grid-template-columns:auto auto 1fr; gap:var(--s4);
-  align-items:center;
-  background:color-mix(in srgb, var(--panel) 90%, transparent);
-  border:1px solid var(--panel-edge); border-radius:3px;
-  padding:var(--s3) var(--s4); backdrop-filter:blur(8px);
-}
-#clock{
-  font-family:"IBM Plex Mono",monospace; font-size:36px; font-weight:500;
-  line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums;
-}
-#clock .z{font-size:12px; color:var(--ink-faint); margin-left:6px}
-#active{
-  font-family:"IBM Plex Mono",monospace; font-size:10.5px;
-  color:var(--ink-dim); margin-top:7px; font-variant-numeric:tabular-nums;
-}
-.controls{display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap;
-  max-width:250px}
-button.ctl{
-  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.06em;
-  background:transparent; color:var(--ink-dim);
-  border:1px solid var(--panel-edge); border-radius:2px;
-  padding:6px 10px; cursor:pointer;
-}
-button.ctl:hover{color:var(--ink); border-color:var(--ink-faint)}
-button.ctl[aria-pressed="true"]{color:var(--ground); background:var(--accent);
-  border-color:var(--accent)}
-button.ctl:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
-button.ctl:disabled{opacity:.4; cursor:default}
-
-#chartWrap{position:relative}
-#chart{display:block; width:100%; height:56px; cursor:pointer}
-#axis{display:flex; justify-content:space-between;
-  font-family:"IBM Plex Mono",monospace; font-size:9.5px;
-  color:var(--ink-faint); margin-top:3px}
-#chartLabel{
-  position:absolute; top:-2px; left:0;
-  font-family:"IBM Plex Mono",monospace; font-size:9px;
-  letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint);
-}
-
-#note{
-  position:absolute; left:var(--s4); bottom:150px; z-index:5;
-  font-family:"IBM Plex Mono",monospace; font-size:9.5px;
-  color:var(--ink-faint); letter-spacing:.04em; max-width:320px;
-  line-height:1.6;
-}
 #loading{
   position:absolute; inset:0; z-index:20; display:grid; place-items:center;
   background:var(--ground); font-family:"IBM Plex Mono",monospace;
-  font-size:12px; color:var(--ink-dim); letter-spacing:.1em;
+  font-size:14px; color:var(--ink-dim); letter-spacing:.1em;
   text-align:center; padding:2em; line-height:1.7;
 }
-@media (max-width:1000px){
-  #panel{display:none} #note{display:none}
-  #title h1{font-size:21px}
-  #bar{grid-template-columns:auto 1fr; gap:var(--s3); padding:var(--s3)}
-  #clock{font-size:25px}
+@media (max-width:1100px){
+  #panel{display:none}
+  #title h1{font-size:24px}
+  #title p{font-size:13.5px}
 }

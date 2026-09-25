@@ -21,6 +21,8 @@ WEB = os.path.join(PROJECT, "gothenburg-day")
 JSWEB = os.path.join(PROJECT, "gothenburg-day-js")
 # the separate phone-data (FlowSense) dashboard
 PHONEWEB = os.path.join(PROJECT, "gothenburg-phone-js")
+# the corridor comparison map (synthetic vs phones vs 2023 counts)
+CORRWEB = os.path.join(PROJECT, "gothenburg-corridors-js")
 
 # CARTO basemap tiles now need a (free) API key: carto.com/basemaps/apikey
 TILE_URL = "https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png"

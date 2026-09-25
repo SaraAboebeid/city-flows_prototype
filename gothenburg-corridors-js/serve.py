@@ -1,6 +1,6 @@
-"""Serve the phone-data dashboard locally and open it in the browser.
+"""Serve the corridor comparison map locally and open it in the browser.
 
-    python serve.py            # picks a free port from 8775 upwards
+    python serve.py            # picks a free port from 8785 upwards
     python serve.py 9000       # or ask for a specific one
 
 Why not plain `python -m http.server`: on machines running Docker/WSL, another
@@ -34,7 +34,7 @@ def free_everywhere(port):
 def main():
     want = int(sys.argv[1]) if len(sys.argv) > 1 else None
     port = want if want and free_everywhere(want) else next(
-        p for p in range(8775, 8900) if free_everywhere(p))
+        p for p in range(8785, 8900) if free_everywhere(p))
     if want and port != want:
         print(f"port {want} is taken (possibly on IPv6); using {port} instead")
 
@@ -50,7 +50,7 @@ def main():
     handler = lambda *a, **k: Handler(*a, directory=HERE, **k)
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
     url = f"http://127.0.0.1:{port}/"
-    print(f"Göteborg phone flows (FlowSense): {url}   (Ctrl+C to stop)")
+    print(f"Göteborg corridor comparison: {url}   (Ctrl+C to stop)")
     threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
         httpd.serve_forever()
