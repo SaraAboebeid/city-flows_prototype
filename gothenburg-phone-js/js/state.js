@@ -6,11 +6,10 @@
 export const S = {
   th: 0,                 // speed-filter index, 0 = all speeds .. 8 = >= 20 km/h
   sweeping: false,       // auto-sweep through the speed filters
-  mode: "volume",        // street colouring: volume | slow | lane | net
+  mode: "volume",        // the view: volume | slow | lane | net | heat
   showThin: true,        // draw roads with fewer than 5 crossings (faint)
-  layers: {              // map layers, each switched on and off on its own
-    load: true,          // heat surface
-    flows: true,         // the street network
+  layers: {              // extras on top of the chosen view
+    flows: true,         // what the view paints: the streets, or the heat surface
     particles: false,    // direction tokens, off by default: this is a still map
     counts: false,       // 2023 traffic count sites
   },

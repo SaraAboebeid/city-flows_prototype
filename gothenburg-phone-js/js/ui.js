@@ -23,7 +23,7 @@ function renderLayers(){
     const on = S.layers[key];
     b.setAttribute("aria-pressed", String(on));
     b.innerHTML = phone.swatch(key) +
-      `<span>${phone.LAYERS.find(l => l.key === key).name}</span>` +
+      `<span>${phone.layerName(key)}</span>` +
       `<span class="n">${on ? phone.layerStat(key) : "off"}</span>`;
     body.hidden = !on;
     body.innerHTML = on ? phone.layerLegend(key) : "";

@@ -30,20 +30,25 @@ const PARTICLE = [255, 236, 190];
 const COUNTS = [255, 68, 92];        // the 2023 count sites: a red nothing else uses
 const THIN = 5;                      // crossings below this cannot be ranked
 const SLOW_MAX = 3;                  // slow index colour saturates here (and 1/3)
+// the first row is whatever the chosen view paints; the rest are extras
 export const LAYERS = [
-  {key:"load",      name:"Traffic heat"},
   {key:"flows",     name:"Street flows"},
   {key:"particles", name:"Moving particles"},
   {key:"counts",    name:"Count sites 2023"},
 ];
-// each colouring asks the street network a different question
+export const layerName = key => key === "flows" && isHeat() ? "Traffic heat"
+  : (LAYERS.find(l => l.key === key) || {}).name;
+// each view asks the same data a different question. The first four colour the
+// street network; HEAT drops the streets and shows a density surface instead.
 export const MODES = [
   {key:"volume", name:"VOLUME",   q:"How busy is this street?"},
   {key:"slow",   name:"SLOW",     q:"How fast is the traffic here?"},
   {key:"lane",   name:"PER LANE", q:"Is this street busy for its size?"},
   {key:"net",    name:"NETWORK",  q:"Is it busier than the city's layout predicts?"},
+  {key:"heat",   name:"HEAT",     q:"Which parts of the city carry the traffic?"},
 ];
 export const modeQuestion = k => (MODES.find(m => m.key === k) || MODES[0]).q;
+export const isHeat = () => S.mode === "heat";
 const fmtN = n => Math.round(n).toLocaleString("en");
 const tipStyle = {background:"rgba(14,23,32,.96)", color:"#DCE6F0",
   border:"1px solid #1D2C39", borderRadius:"3px", padding:"10px 12px",
@@ -231,13 +236,12 @@ function heatLayer(){
   if(deck.HeatmapLayer) return new deck.HeatmapLayer({
     id:"load", data:loadRows, getPosition:d=>d.p, getWeight:d=>d.w,
     aggregation:"SUM", radiusPixels:S.zoom > 13 ? 60 : 45, intensity:1.2,
-    threshold:0.03, colorRange:range, opacity:S.layers.flows ? 0.75 : 0.95,
+    threshold:0.03, colorRange:range, opacity:0.95,
     updateTriggers:{getWeight:version}});
   return new deck.ScatterplotLayer({            // older deck builds: the old cells
     id:"load", data:loadRows, getPosition:d=>d.p, getFillColor:d=>d.c,
     radiusUnits:"meters", getRadius:LOAD.cell*0.66, radiusMinPixels:0.8, stroked:false,
-    opacity:S.layers.flows ? 0.7 : 1, pickable:true,
-    updateTriggers:{getFillColor:version}, parameters:{depthTest:false}});
+    pickable:true, updateTriggers:{getFillColor:version}, parameters:{depthTest:false}});
 }
 
 // One PathLayer per band, so the busiest roads are drawn last and read on top
@@ -257,8 +261,8 @@ function roadBand(id, band, zs, extra = {}){
 export function layers(){
   if(!R) return [];
   const on = S.layers, zs = zoomScale(), out = [];
-  if(on.load) out.push(heatLayer());
-  if(on.flows){
+  if(on.flows && isHeat()) out.push(heatLayer());
+  if(on.flows && !isHeat()){
     // a soft halo under the busiest roads, so the main network carries at a glance
     out.push(new deck.PathLayer({
       id:"roads-halo", data:{length:R.n, startIndices:R.start, attributes:{getPath:{value:R.pos, size:2}}},
@@ -325,6 +329,8 @@ const laneTicks = ref => `<div class="cap" style="margin-top:2px">Scale: ` +
 
 export function swatch(key){
   if(key === "particles") return `<span class="sw" style="background:rgb(${PARTICLE.join(",")})"></span>`;
+  if(key === "flows" && isHeat())
+    return `<span class="sw" style="background:linear-gradient(90deg,rgb(${rampColor(0.2).map(Math.round).join(",")}),rgb(${rampColor(1).map(Math.round).join(",")}))"></span>`;
   if(key === "flows"){
     if(S.mode === "slow" || S.mode === "net")
       return `<span class="sw" style="background:linear-gradient(90deg,rgb(${diverge(-1).map(Math.round).join(",")}),rgb(${diverge(1).map(Math.round).join(",")}))"></span>`;
@@ -345,6 +351,11 @@ export function layerLegend(key){
       count and thicker the busier it is (${fmtN(pt.particles)} particles at ${thLabel(th())}).</div>`;
   }
   if(key === "flows"){
+    if(isHeat())
+      return bar(rampColor, "quiet", "busiest", "Heat scale") +
+        `<div class="cap">Every sampled crossing is dropped on a 100 m grid and then blurred, so neighbouring
+        streets add up: <b>bright means a whole area is busy</b>, not one road. This view drops the street
+        network — the other four answer "which road".</div>`;
     if(S.mode === "slow"){
       const s = D.stats.design, rows = s && s.slow_by_class ? Object.entries(s.slow_by_class)
         .sort((a,b) => b[1].median_slow_index - a[1].median_slow_index) : [];
@@ -381,12 +392,6 @@ export function layerLegend(key){
       at ${thLabel(th())}. The busiest roads are drawn last, over a soft halo, so the main network
       reads through the quiet web around it.</div>`;
   }
-  if(key === "load")
-    return bar(rampColor, "quiet", "busiest", "Heat scale") +
-      `<div class="cap"><b>Which parts of the city carry the traffic.</b> Every sampled crossing is dropped on a
-      100 m grid and then blurred, so neighbouring streets add up: bright means a whole area is busy, not one
-      road. Which road carries it is the street layer's job — switch <b>Street flows</b> off to read the heat
-      on its own.</div>`;
   return `<div class="cap">The <b>red dots</b> are real traffic counters: Trafikverket highway links and
     Göteborg Stad points, 2023. Hover one for its measured vehicles per day — the only true volumes on
     this map.</div>`;
@@ -396,11 +401,11 @@ export function layerStat(key){
   if(!R) return "";
   if(key === "particles") return fmtN(particles().particles);
   if(key === "flows"){
+    if(isHeat()) return fmtN(loadRows.length)+" cells";
     const c = cnt(); let n = 0;
     for(let i=0;i<R.n;i++) if(c[i] >= (S.showThin ? 1 : THIN)) n++;
     return fmtN(n);
   }
-  if(key === "load") return fmtN(loadRows.length)+" cells";
   return fmtN(D.ground.length);
 }
 

@@ -42,7 +42,12 @@ canvas{outline:none}
   border-left:2px solid var(--panel-edge); padding-left:var(--s2);
   margin-top:var(--s3);
 }
-#cite em{font-style:normal; color:var(--ink-dim)}
+/* the dataset credit gets the same treatment as the byline name */
+#cite b{
+  font-family:"IBM Plex Mono",monospace; font-weight:500;
+  letter-spacing:.04em; color:var(--ink);
+}
+#cite em{font-style:normal; color:inherit}
 #cite a{color:var(--accent); text-decoration:none; word-break:break-all}
 #cite a:hover{text-decoration:underline}
 #cite a:focus-visible{outline:1.5px solid var(--accent); outline-offset:2px}
