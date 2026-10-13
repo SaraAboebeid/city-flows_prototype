@@ -63,7 +63,9 @@ export const ready = () => !!R;
 export const thresholds = () => D ? D.thresholds : [0];
 export const thLabel = i => { const t = thresholds()[i]; return t ? `≥ ${t} km/h` : "all speeds"; };
 export const stats = () => D ? D.stats : null;
-const th = () => Math.max(0, Math.min(thresholds().length - 1, S.th));
+// VOLUME shows the raw count only: trajcount_minavgspeed0, no speed filter
+export const rawOnly = () => S.mode === "volume";
+const th = () => rawOnly() ? 0 : Math.max(0, Math.min(thresholds().length - 1, S.th));
 const cnt = () => R.counts[th()];
 
 // Poisson 95% interval for a sampled count
@@ -108,7 +110,9 @@ export async function load(sweep){
   CI = {max:D.ci.max, lo:new Float32Array(clo), hi:new Float32Array(chi)};
 }
 
-const roadRef = i => R.ref[i] ?? (R.ref[i] = pctile(R.counts[i], 0.995));
+// the raw maximum crossing count (FlowSense trajcount), so the scale reads in
+// absolute crossings up to the busiest road instead of a clipped percentile
+const roadRef = i => R.ref[i] ?? (R.ref[i] = R.counts[i].reduce((m, v) => Math.max(m, v), 1));
 // crossings per lane, where OpenStreetMap tags a lane count
 export const perLane = (i, k) => R.lanes[k] ? R.counts[i][k] / R.lanes[k] : NaN;
 function laneRef(i){
@@ -388,8 +392,10 @@ export function layerLegend(key){
         This shows traffic percentile minus centrality percentile: <b>magenta</b> = busier than the layout predicts,
         <b>azure</b> = quieter. Grey = too few crossings to tell.</div>`;
     return widthLegend(roadRef(th())) +
-      `<div class="cap"><b>Width and colour</b> = sampled crossings per road, both directions${when},
-      at ${thLabel(th())}. The busiest roads are drawn last, over a soft halo, so the main network
+      `<div class="cap"><b>Width and colour</b> = the raw FlowSense count per road
+      (trajcount_minavgspeed0: absolute sampled crossings, both directions${when}). No speed
+      filter, no relative flow, no lane count. The scale runs up to the busiest road's
+      ${fmtN(roadRef(th()))}. The busiest roads are drawn last, over a soft halo, so the main network
       reads through the quiet web around it.</div>`;
   }
   return `<div class="cap">The <b>red dots</b> are real traffic counters: Trafikverket highway links and
@@ -413,6 +419,11 @@ export function layerStat(key){
 export function sweepNote(el){
   if(!el || !D) return;
   const i = th(), reached = D.stats.reached[i];
+  if(rawOnly()){
+    el.innerHTML = `<div class="cap"><b>Off in VOLUME</b>, which always shows the raw count with no speed
+      filter (${fmtN(reached)} roads). The filter applies to SLOW, PER LANE, NETWORK and HEAT.</div>`;
+    return;
+  }
   el.innerHTML = `<div class="cap"><b>${thLabel(i)}</b> — ${fmtN(D.stats.reached[0])} roads carry
     all-speeds traffic, ${fmtN(reached)} at this filter. Each filter is its <b>own draw of 100,000 crossings</b>
     from the trips that fast, not a subset of the one before, so counts can rise as the filter tightens.
@@ -446,6 +457,10 @@ export function tooltip({layer, object, index}){
   if(!R || !layer || index < 0) return null;
   if(layer.id.startsWith("roads") && layer.id !== "roads-halo"){
     const i = th(), k = R.counts[i][index], [lo, hi] = ci(k);
+    // VOLUME: the raw FlowSense count and nothing else (no speed, no OSM lanes)
+    if(rawOnly())
+      return {style:tipStyle, html:`<div style="color:#8195A8;font-size:11.5px;letter-spacing:.08em">ROAD · BOTH DIRECTIONS</div>
+        <div style="font-size:20px;margin:5px 0">${fmtN(k)} <span style="font-size:12.5px;color:#9DB1C4">sampled crossings (raw count)</span></div>`};
     const slow = R.slowKnown[index] ? (R.slow[index]/100) : null;
     const res = R.residKnown[index] ? (R.resid[index]/100) : null;
     const lanes = R.lanes[index], scls = D.street_classes[R.scls[index]];
