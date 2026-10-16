@@ -40,7 +40,7 @@ Panel controls:
   | button | question | colours |
   |---|---|---|
   | VOLUME | How many sampled trips crossed this road? | blue → cyan → mint → white |
-  | SPEED | All-speeds count against the ≥ 20 km/h count | violet (index below 1) ↔ ember (above 1) |
+  | SPEED | Is this road's share of the sampled trips bigger at all speeds or at ≥ 20 km/h? | violet (index below 1) ↔ ember (above 1) |
   | PER LANE | How many sampled trips crossed this road per driving lane? | teal → green → lime → yellow |
   | HEAT | Where do the sampled trips cross most often? | violet → magenta → orange → gold → white |
 - **Speed filter**: a slider through the nine minimum-average-speed filters
@@ -99,6 +99,7 @@ restrict it to your domain in the CARTO dashboard before publishing.
 | file | role |
 |---|---|
 | `index.html`, `css/style.css` | markup and styles |
+| `img/chalmers-next-labs-white.png` | the Chalmers Next Labs logo (official white version, cropped and resized from `CNL_new_logo_white.png`) |
 | `js/main.js` | loads `data/`, runs the clock |
 | `js/state.js` | the shared state object |
 | `js/phone.js` | the phone data: particles, load, flows, time-of-day profiles, panel text, tooltips |

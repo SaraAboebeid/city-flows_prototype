@@ -57,7 +57,7 @@ export const layerName = key => key === "flows" && isHeat() ? "Traffic heat"
 // street network; HEAT drops the streets and shows a density surface instead.
 export const MODES = [
   {key:"volume", name:"VOLUME",   q:"How many sampled trips crossed this road?"},
-  {key:"slow",   name:"SPEED",    q:"All-speeds count against the ≥ 20 km/h count"},
+  {key:"slow",   name:"SPEED",    q:"Is this road's share of the sampled trips bigger at all speeds or at ≥ 20 km/h?"},
   {key:"lane",   name:"PER LANE", q:"How many sampled trips crossed this road per driving lane?"},
   {key:"heat",   name:"HEAT",     q:"Where do the sampled trips cross most often?"},
 ];
@@ -403,9 +403,9 @@ export function layerLegend(key){
         what is in view. No street network in this view.</div>`;
     if(S.mode === "slow")
       return bar(t => diverge(-1+2*t), "index below 1", "index above 1", "Speed index scale") +
-        `<div class="cap"><b>Index above 1 (ember):</b> the road has a bigger share of the all-speeds sample
-        than of the ≥ 20 km/h sample.<br><b>Index below 1 (violet):</b> the road has a bigger share of the
-        ≥ 20 km/h sample than of the all-speeds sample.<br><b>Grey:</b> no index. Either the road has fewer
+        `<div class="cap"><b>Index above 1 (ember):</b> the road's share of the sampled trips is bigger at
+        all speeds than at ≥ 20 km/h.<br><b>Index below 1 (violet):</b> the road's share of the sampled
+        trips is bigger at ≥ 20 km/h than at all speeds.<br><b>Grey:</b> no index. Either the road has fewer
         than 5 crossings in both samples, or it has none at ≥ 20 km/h.</div>`;
     if(S.mode === "lane")
       return bar(lramp, "light", "heaviest", "Per-lane scale") +

@@ -37,6 +37,10 @@ canvas{outline:none}
   color:var(--ink-dim); margin:var(--s3) 0 0;
 }
 #byline b{color:var(--ink); font-weight:500}
+/* the Chalmers Next Labs logo (official white version) at the top of the panel */
+#logo{display:block; height:50px; width:auto; max-width:100%; object-fit:contain; object-position:left; opacity:.88;
+      margin-bottom:var(--s3); padding-bottom:var(--s3);
+      box-sizing:content-box; border-bottom:1px solid var(--panel-edge)}
 #cite{
   font-size:12px; line-height:1.6; color:var(--ink-faint);
   border-left:2px solid var(--panel-edge); padding-left:var(--s2);
