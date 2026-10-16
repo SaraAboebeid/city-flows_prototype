@@ -6,7 +6,7 @@
 export const S = {
   th: 0,                 // speed-filter index, 0 = all speeds .. 8 = >= 20 km/h
   sweeping: false,       // auto-sweep through the speed filters
-  mode: "volume",        // the view: volume | slow | lane | net | heat
+  mode: "volume",        // the view: volume | slow (SPEED) | lane | heat
   showThin: true,        // draw roads with fewer than 5 crossings (faint)
   layers: {              // extras on top of the chosen view
     flows: true,         // what the view paints: the streets, or the heat surface

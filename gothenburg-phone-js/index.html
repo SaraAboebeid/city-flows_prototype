@@ -29,7 +29,7 @@
     <a href="https://doi.org/10.5281/zenodo.16794871"
        target="_blank" rel="noopener">doi.org/10.5281/zenodo.16794871</a>
     · Method: Teeuwen &amp; Gil (2025), NetMob 2025, pp. 129–130.
-    · Counts: Trafikverket and Göteborg Stad, 2023. Basemap © OpenStreetMap contributors © CARTO.
+    · Counts: Trafikverket and Göteborg Stad, 2023. Road names and data: NVDB, Trafikverket. Basemap © OpenStreetMap contributors © CARTO.
   </p>
 </div>
 
@@ -38,18 +38,17 @@
     <h2 class="grouphead">Street flows show</h2>
     <div class="seg" id="modeSeg">
       <button data-m="volume" aria-pressed="true">VOLUME</button>
-      <button data-m="slow" aria-pressed="false">SLOW</button>
+      <button data-m="slow" aria-pressed="false">SPEED</button>
       <button data-m="lane" aria-pressed="false">PER LANE</button>
-      <button data-m="net" aria-pressed="false">NETWORK</button>
       <button data-m="heat" aria-pressed="false">HEAT</button>
     </div>
-    <p id="modeQ">How busy is this street?</p>
+    <p id="modeQ">How many sampled trips crossed this road?</p>
   </div>
   <div class="group">
     <h2 class="grouphead">Layers</h2>
     <div id="layers"></div>
   </div>
-  <div class="group">
+  <div class="group" id="grpSpeed">
     <h2 class="grouphead">Speed filter <span id="thLabel" class="hint"></span></h2>
     <div class="sweep">
       <button class="ctl" id="sweepBtn" aria-pressed="false" title="Sweep through the nine filters">SWEEP</button>
@@ -58,14 +57,11 @@
     </div>
     <div id="sweepNote"></div>
   </div>
-  <div class="group">
+  <div class="group" id="grpNoise">
     <h2 class="grouphead">Sampling noise</h2>
-    <div class="chips" id="thinChips">
-      <button class="chip" data-k="showThin" aria-pressed="true">Show thinly sampled roads</button>
-    </div>
     <div id="uncNote"></div>
   </div>
-  <div class="group">
+  <div class="group" id="grpCounts">
     <h2 class="grouphead">Against 2023 traffic counts</h2>
     <div id="quality"></div>
   </div>

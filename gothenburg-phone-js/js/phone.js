@@ -6,7 +6,7 @@
 // average speed from 0 to 20 km/h. Those nine draws are independent, not
 // nested subsets, so sweeping the filter upwards does not remove traffic from
 // a fixed sample - it swaps in a different 100,000 crossings, made only by
-// trips that fast. The map moves from all movement to motor traffic only.
+// trips with at least that average speed.
 //
 // No time of day and no individual trips are published, so:
 //   - particles move in each road's real direction, in proportion to that
@@ -15,12 +15,12 @@
 //
 // Layers, each switched on and off on its own (drawn bottom to top):
 //   load       crossings per 100 m cell
-//   flows      roads, coloured by volume, slow-traffic index or network residual
+//   flows      roads, coloured by volume, speed (slow-traffic index) or per lane
 //   particles  moving particles, thicker on busier roads
 //   counts     2023 traffic count sites
 import { S } from "./state.js";
 import { inflate, lines, pctile } from "./decode.js";
-import { rampColor, vramp, lramp, diverge, divergeNet } from "./colors.js";
+import { rampColor, vramp, lramp, diverge } from "./colors.js";
 
 const FMINW = 0.6, FMAXW = 10;
 const PMINW = 1.4, PMAXW = 5;
@@ -30,6 +30,21 @@ const PARTICLE = [255, 236, 190];
 const COUNTS = [255, 68, 92];        // the 2023 count sites: a red nothing else uses
 const THIN = 5;                      // crossings below this cannot be ranked
 const SLOW_MAX = 3;                  // slow index colour saturates here (and 1/3)
+// VOLUME classes: six equal intervals of raw all-speeds crossings, from 1 to the
+// busiest road (step = ceil(max / 6)), nothing divided or rescaled. A road's
+// colour and width say which interval its own count falls in.
+const VSTYLE = [[0.8, 0.12], [1.4, 0.30], [2.4, 0.48], [4, 0.66], [6.5, 0.84], [9, 1]];  // width, colour
+let VCLASS = [], VSTEP = 1;
+function buildClasses(max){
+  VSTEP = Math.max(1, Math.ceil(max / VSTYLE.length));
+  VCLASS = VSTYLE.map(([w, t], j) => ({lo:j*VSTEP + 1, hi:(j+1)*VSTEP, w, col:vramp(t)}));
+}
+const vclass = k => Math.min(VCLASS.length - 1, Math.floor((k - 1) / VSTEP));
+// a class's colour as drawn: blended into the dark ground, brighter for higher classes
+function vshade(j, faint){
+  const c = VCLASS[j].col, a = (70 + 130 * j / (VCLASS.length - 1)) / 255 * (faint ? 0.45 : 1);
+  return [0, 1, 2].map(n => Math.round(GROUND[n] + (c[n] - GROUND[n]) * a));
+}
 // the first row is whatever the chosen view paints; the rest are extras
 export const LAYERS = [
   {key:"flows",     name:"Street flows"},
@@ -38,14 +53,13 @@ export const LAYERS = [
 ];
 export const layerName = key => key === "flows" && isHeat() ? "Traffic heat"
   : (LAYERS.find(l => l.key === key) || {}).name;
-// each view asks the same data a different question. The first four colour the
+// each view asks the same data a different question. The first three colour the
 // street network; HEAT drops the streets and shows a density surface instead.
 export const MODES = [
-  {key:"volume", name:"VOLUME",   q:"How busy is this street?"},
-  {key:"slow",   name:"SLOW",     q:"How fast is the traffic here?"},
-  {key:"lane",   name:"PER LANE", q:"Is this street busy for its size?"},
-  {key:"net",    name:"NETWORK",  q:"Is it busier than the city's layout predicts?"},
-  {key:"heat",   name:"HEAT",     q:"Which parts of the city carry the traffic?"},
+  {key:"volume", name:"VOLUME",   q:"How many sampled trips crossed this road?"},
+  {key:"slow",   name:"SPEED",    q:"All-speeds count against the ≥ 20 km/h count"},
+  {key:"lane",   name:"PER LANE", q:"How many sampled trips crossed this road per driving lane?"},
+  {key:"heat",   name:"HEAT",     q:"Where do the sampled trips cross most often?"},
 ];
 export const modeQuestion = k => (MODES.find(m => m.key === k) || MODES[0]).q;
 export const isHeat = () => S.mode === "heat";
@@ -54,7 +68,7 @@ const tipStyle = {background:"rgba(14,23,32,.96)", color:"#DCE6F0",
   border:"1px solid #1D2C39", borderRadius:"3px", padding:"10px 12px",
   fontFamily:"'IBM Plex Mono', monospace", fontSize:"13.5px", lineHeight:"1.5"};
 
-let D = null, R = null, DIR = null, LOAD = null, CI = null;
+let D = null, R = null, DIR = null, LOAD = null, CI = null, NV = null;
 let version = 0, tau = 0, stepKey = "";
 const partCache = new Map();         // threshold -> particle set (a few kept)
 let loadRows = [], loadMax = 1;
@@ -63,9 +77,12 @@ export const ready = () => !!R;
 export const thresholds = () => D ? D.thresholds : [0];
 export const thLabel = i => { const t = thresholds()[i]; return t ? `≥ ${t} km/h` : "all speeds"; };
 export const stats = () => D ? D.stats : null;
-// VOLUME shows the raw count only: trajcount_minavgspeed0, no speed filter
-export const rawOnly = () => S.mode === "volume";
-const th = () => rawOnly() ? 0 : Math.max(0, Math.min(thresholds().length - 1, S.th));
+// the speed filter belongs to the SPEED view only; every other view reads the
+// all-speeds draw (trajcount_minavgspeed0, the raw FlowSense count)
+export const filterOn = () => S.mode === "slow";
+// views without the speed, sampling and count-site panels: every road with a count is drawn
+export const plainView = () => S.mode === "volume" || S.mode === "lane";
+const th = () => filterOn() ? Math.max(0, Math.min(thresholds().length - 1, S.th)) : 0;
 const cnt = () => R.counts[th()];
 
 // Poisson 95% interval for a sampled count
@@ -76,23 +93,39 @@ export function ci(k){
   return [Math.max(0, k - 1.96*s), k + 1.96*s];
 }
 
+// NVDB data per road, looked up by RLID through Trafikverket's API (stage 32)
+export function loadNvdb(lut){ NV = lut; }
+const nv = (k, i) => NV && NV.n === R.n ? NV.strings[NV[k][i]] || "" : "";
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// the road's NVDB lines for a tooltip: name, then RLID, road number, limit, manager
+function nvdbHtml(i){
+  if(!NV || NV.n !== R.n) return {title:"", lines:""};
+  const name = nv("name", i), rlid = nv("rlid", i), road = nv("road", i),
+        speed = nv("speed", i), mgr = nv("manager", i);
+  const facts = [road && `road ${esc(road)}`, speed && `${esc(speed)} km/h limit`].filter(Boolean).join(" · ");
+  return {
+    title: name ? `<div style="font-weight:500;font-size:15px">${esc(name)}</div>` : "",
+    lines: `<div style="color:#8195A8;margin-top:4px">RLID ${esc(rlid)}${facts ? " · " + facts : ""}</div>` +
+      (mgr ? `<div style="color:#8195A8">${esc(mgr)}</div>` : "") +
+      `<div style="color:#5F7488;font-size:11.5px">NVDB · Trafikverket</div>`};
+}
+
 export async function load(sweep){
   D = sweep;
   const P = (o, k) => inflate(o[k]);
-  const [rc, rn, rcls, slow, slowK, resid, residK] = await Promise.all(
+  const [rc, rn, rcls, slow, slowK] = await Promise.all(
     [P(D.roads,"coords"), P(D.roads,"npts"), P(D.roads,"cls"), P(D.roads,"slow"),
-     P(D.roads,"slow_known"), P(D.roads,"resid"), P(D.roads,"resid_known")]);
+     P(D.roads,"slow_known")]);
   const rcounts = await Promise.all(D.roads.counts.map(inflate));
   R = {n:D.roads.n, ...lines(rc, new Uint16Array(rn)), cls:new Uint8Array(rcls),
        counts:rcounts.map(b => new Uint16Array(b)),
        slow:new Uint16Array(slow), slowKnown:new Uint8Array(slowK),
-       resid:new Int8Array(resid), residKnown:new Uint8Array(residK),
        col:new Uint8Array(D.roads.n*4), wid:new Float32Array(D.roads.n),
        band:new Uint8Array(D.roads.n), ref:[], laneRef:[]};
   const [lanes, scls] = await Promise.all([P(D.roads,"lanes"), P(D.roads,"scls")]);
   R.lanes = new Uint8Array(lanes);          // 0 = not tagged in OpenStreetMap
   R.scls = new Uint8Array(scls);            // index into D.street_classes, 255 = unknown
-
+  buildClasses(R.counts[0].reduce((m, v) => Math.max(m, v), 1));
   const [dc, dn, dcls] = await Promise.all(
     [P(D.directed,"coords"), P(D.directed,"npts"), P(D.directed,"cls")]);
   const dcounts = await Promise.all(D.directed.counts.map(inflate));
@@ -187,16 +220,25 @@ export function compute(){
   for(let k=0;k<R.n;k++){
     const thin = c[k] < THIN;
     R.band[k] = 0;
-    if(c[k] <= 0 || (thin && !S.showThin)){ R.wid[k] = 0; R.col[k*4+3] = 0; continue; }
+    // every street view draws every road with a count
+    if(c[k] <= 0){ R.wid[k] = 0; R.col[k*4+3] = 0; continue; }
+    if(S.mode === "volume"){
+      // the raw count picks a fixed class (its colour and width). The class's
+      // colour is then blended into the dark ground, brighter for higher classes
+      // and fainter below 5 crossings, with a soft halo under classes 11+ - the
+      // same effects as the other street views
+      const j = vclass(c[k]), v = VCLASS[j];
+      R.band[k] = j >= 1 ? 2 : c[k] >= THIN ? 1 : 0;   // band 2 gets the halo, and is drawn last
+      R.col.set([...vshade(j, thin), 255], k*4);
+      R.wid[k] = v.w;
+      continue;
+    }
     const q = Math.min(1, c[k]/ref);
     let col, known = true;
     if(S.mode === "slow"){
       known = !!R.slowKnown[k];
       const idx = R.slow[k]/100;                                  // 1 = city average mix
       col = known ? diverge(Math.max(-1, Math.min(1, Math.log2(Math.max(idx, 1e-3))/Math.log2(SLOW_MAX)))) : [50,62,76];
-    } else if(S.mode === "net"){
-      known = !!R.residKnown[k];
-      col = known ? divergeNet(Math.max(-1, Math.min(1, (R.resid[k]/100) / 0.5))) : [50,62,76];
     } else if(S.mode === "lane"){
       // linear, not square-rooted: per-lane values bunch up near the top, and
       // the square root pushed most of them into the white end at once
@@ -210,7 +252,7 @@ export function compute(){
     R.band[k] = q >= 0.25 ? 2 : q >= 0.06 ? 1 : 0;
     // solid colour on the dark ground: overlapping road pieces would otherwise
     // stack their transparency into bright beads
-    const a = (S.mode === "volume" ? (70 + 130*q) : (known ? 235 : 70)) / 255 * (thin ? 0.45 : 1);
+    const a = (known ? 235 : 70) / 255 * (thin ? 0.45 : 1);
     R.col.set([GROUND[0]+(col[0]-GROUND[0])*a, GROUND[1]+(col[1]-GROUND[1])*a,
                GROUND[2]+(col[2]-GROUND[2])*a, 255], k*4);
     R.wid[k] = (FMINW + (FMAXW-FMINW)*q) * (thin ? 0.5 : 1);
@@ -308,14 +350,17 @@ export function layers(){
 
 // ---------- panel ----------
 
-function widthLegend(ref){
-  let svg = "";
-  [0.05,0.25,0.5,1].forEach((q,k)=>{
-    const c = vramp(Math.sqrt(q)).map(Math.round), w = FMINW+(FMAXW-FMINW)*q, x = 6+k*54;
-    svg += `<line x1="${x}" y1="10" x2="${x+38}" y2="10" stroke="rgb(${c.join(",")})" stroke-width="${w}" stroke-linecap="round"/>
-      <text x="${x+19}" y="31" fill="#9DB1C4" font-size="12" text-anchor="middle" font-family="IBM Plex Mono, monospace">${Math.max(1, Math.round(ref*q))}</text>`;
-  });
-  return `<svg viewBox="0 0 222 42" role="img" aria-label="Crossings scale">${svg}</svg>`;
+// VOLUME legend: each class with its raw count range and how many roads fall in it
+function volumeLegend(){
+  const c = cnt(), n = VCLASS.map(() => 0);
+  for(let k=0;k<R.n;k++) if(c[k] > 0) n[vclass(c[k])]++;
+  return `<table class="rho"><caption>raw sampled crossings per road</caption>` +
+    VCLASS.map((v, j) => {
+      const range = v.hi === Infinity ? `${v.lo}+` : v.lo === v.hi ? `${v.lo}` : `${v.lo}–${v.hi}`;
+      return `<tr><td><svg width="44" height="12" aria-hidden="true"><line x1="5" y1="6" x2="39" y2="6"
+        stroke="rgb(${vshade(j).join(",")})" stroke-width="${v.w}" stroke-linecap="round"/></svg> ${range}</td>
+        <td>${fmtN(n[j])} roads</td></tr>`;
+    }).join("") + `</table>`;
 }
 function bar(fn, left, right, label){
   let s = "";
@@ -326,17 +371,13 @@ function bar(fn, left, right, label){
     <text x="220" y="30" fill="#9DB1C4" font-size="12" text-anchor="end" font-family="IBM Plex Mono, monospace">${right}</text></svg>`;
 }
 
-// the numbers behind the per-lane colour scale
-const laneTicks = ref => `<div class="cap" style="margin-top:2px">Scale: ` +
-  [0.25, 0.5, 0.75, 1].map(q => Math.max(1, Math.round(ref*q))).join(" · ") +
-  ` crossings per lane.</div>`;
 
 export function swatch(key){
   if(key === "particles") return `<span class="sw" style="background:rgb(${PARTICLE.join(",")})"></span>`;
   if(key === "flows" && isHeat())
     return `<span class="sw" style="background:linear-gradient(90deg,rgb(${rampColor(0.2).map(Math.round).join(",")}),rgb(${rampColor(1).map(Math.round).join(",")}))"></span>`;
   if(key === "flows"){
-    if(S.mode === "slow" || S.mode === "net")
+    if(S.mode === "slow")
       return `<span class="sw" style="background:linear-gradient(90deg,rgb(${diverge(-1).map(Math.round).join(",")}),rgb(${diverge(1).map(Math.round).join(",")}))"></span>`;
     if(S.mode === "lane")
       return `<span class="sw" style="background:linear-gradient(90deg,rgb(${lramp(0.25).map(Math.round).join(",")}),rgb(${lramp(1).map(Math.round).join(",")}))"></span>`;
@@ -348,59 +389,35 @@ export function swatch(key){
 
 export function layerLegend(key){
   if(!R) return "";
-  const when = ", whole sample";
   if(key === "particles"){
     const pt = particles();
-    return `<div class="cap">Particles travel in each road's <b>real direction of travel</b>, as many as its
-      count and thicker the busier it is (${fmtN(pt.particles)} particles at ${thLabel(th())}).</div>`;
+    return `<div class="cap">Particles move along each road record's direction in the FlowSense file, as many
+      as its count and thicker the higher the count (${fmtN(pt.particles)} particles at ${thLabel(th())}).
+      Their speed and timing are not in the data.</div>`;
   }
   if(key === "flows"){
     if(isHeat())
-      return bar(rampColor, "quiet", "busiest", "Heat scale") +
-        `<div class="cap">Every sampled crossing is dropped on a 100 m grid and then blurred, so neighbouring
-        streets add up: <b>bright means a whole area is busy</b>, not one road. This view drops the street
-        network — the other four answer "which road".</div>`;
-    if(S.mode === "slow"){
-      const s = D.stats.design, rows = s && s.slow_by_class ? Object.entries(s.slow_by_class)
-        .sort((a,b) => b[1].median_slow_index - a[1].median_slow_index) : [];
-      return bar(t => diverge(-1+2*t), "motor traffic", "slow traffic", "Slow traffic scale") +
-        `<div class="cap"><b>How fast the traffic is</b>, not what it is. A road's share of the all-speeds draw
-        against its share of the ≥ 20 km/h draw. <b>Ember</b> = relatively more slow movement, <b>violet</b> = fast.
-        Slow mixes walking, cycling and cars in congestion — the data carries no mode, so it cannot tell them
-        apart. Grey = too few crossings.</div>` +
-        (rows.length ? `<table class="rho"><caption>median index, by street type</caption>` +
-          rows.slice(0, 4).map(([k, v]) => `<tr><td>${k.replace("_", " ")}</td><td>${v.median_slow_index}</td></tr>`).join("") +
-          rows.slice(-2).map(([k, v]) => `<tr><td>${k.replace("_", " ")}</td><td>${v.median_slow_index}</td></tr>`).join("") +
-          `</table>` : "");
-    }
-    if(S.mode === "lane"){
-      const s = D.stats.design, rows = s && s.by_class ? Object.entries(s.by_class)
-        .sort((a,b) => b[1].median_per_lane - a[1].median_per_lane).slice(0, 6) : [];
-      return bar(lramp, "light", "heaviest", "Per-lane scale") + laneTicks(laneRef(th())) +
-        `<div class="cap"><b>Crossings per driving lane</b>, so a four-lane road has to carry four times as much
-        to look as loaded as a single-lane street. Lane counts come from OpenStreetMap, which tags them on
-        ${fmtN(D.stats.roads_with_lanes)} of ${fmtN(D.stats.roads_total)} roads here — 71% of main roads, but few
-        residential streets. Grey = no lane count, or too few crossings.</div>` +
-        (rows.length ? `<table class="rho"><caption>median per lane, by street type</caption>` +
-          rows.map(([k, v]) => `<tr><td>${k.replace("_", " ")}</td><td>${v.median_per_lane}</td></tr>`).join("") +
-          `</table>` : "");
-    }
-    if(S.mode === "net")
-      return bar(t => divergeNet(-1+2*t), "quieter", "busier", "Network residual scale") +
-        `<div class="cap"><b>Against network position.</b> If everyone drove the shortest way between every pair of
-        places, which roads would they be forced onto? That is betweenness centrality on the Trafikverket graph.
-        This shows traffic percentile minus centrality percentile: <b>magenta</b> = busier than the layout predicts,
-        <b>azure</b> = quieter. Grey = too few crossings to tell.</div>`;
-    return widthLegend(roadRef(th())) +
-      `<div class="cap"><b>Width and colour</b> = the raw FlowSense count per road
-      (trajcount_minavgspeed0: absolute sampled crossings, both directions${when}). No speed
-      filter, no relative flow, no lane count. The scale runs up to the busiest road's
-      ${fmtN(roadRef(th()))}. The busiest roads are drawn last, over a soft halo, so the main network
-      reads through the quiet web around it.</div>`;
+      return bar(rampColor, "lowest", "highest", "Heat scale") +
+        `<div class="cap">Each road's crossings are added to every 100 m grid cell it passes through, and the
+        cell totals are blurred, so neighbouring cells add up. Brighter = a higher blurred total, relative to
+        what is in view. No street network in this view.</div>`;
+    if(S.mode === "slow")
+      return bar(t => diverge(-1+2*t), "index below 1", "index above 1", "Speed index scale") +
+        `<div class="cap"><b>Index above 1 (ember):</b> the road has a bigger share of the all-speeds sample
+        than of the ≥ 20 km/h sample.<br><b>Index below 1 (violet):</b> the road has a bigger share of the
+        ≥ 20 km/h sample than of the all-speeds sample.<br><b>Grey:</b> no index. Either the road has fewer
+        than 5 crossings in both samples, or it has none at ≥ 20 km/h.</div>`;
+    if(S.mode === "lane")
+      return bar(lramp, "light", "heaviest", "Per-lane scale") +
+        `<div class="cap"><b>Per lane:</b> the road's all-speeds crossings divided by its number of driving
+        lanes (from OpenStreetMap).<br><b>Light (dark teal):</b> 0 crossings per lane.<br><b>Heaviest
+        (yellow):</b> ${fmtN(laneRef(th()))} or more crossings per lane, the value 95% of roads stay under.<br>
+        <b>Grey:</b> no lane count in OpenStreetMap, or fewer than 5 crossings.</div>`;
+    return volumeLegend();
   }
   return `<div class="cap">The <b>red dots</b> are real traffic counters: Trafikverket highway links and
-    Göteborg Stad points, 2023. Hover one for its measured vehicles per day — the only true volumes on
-    this map.</div>`;
+    Göteborg Stad points, 2023. Hover one for its measured vehicles per day (from the FlowSense ground
+    truth files).</div>`;
 }
 
 export function layerStat(key){
@@ -409,7 +426,7 @@ export function layerStat(key){
   if(key === "flows"){
     if(isHeat()) return fmtN(loadRows.length)+" cells";
     const c = cnt(); let n = 0;
-    for(let i=0;i<R.n;i++) if(c[i] >= (S.showThin ? 1 : THIN)) n++;
+    for(let i=0;i<R.n;i++) if(c[i] >= 1) n++;
     return fmtN(n);
   }
   return fmtN(D.ground.length);
@@ -418,27 +435,15 @@ export function layerStat(key){
 // the speed-filter sweep
 export function sweepNote(el){
   if(!el || !D) return;
-  const i = th(), reached = D.stats.reached[i];
-  if(rawOnly()){
-    el.innerHTML = `<div class="cap"><b>Off in VOLUME</b>, which always shows the raw count with no speed
-      filter (${fmtN(reached)} roads). The filter applies to SLOW, PER LANE, NETWORK and HEAT.</div>`;
-    return;
-  }
-  el.innerHTML = `<div class="cap"><b>${thLabel(i)}</b> — ${fmtN(D.stats.reached[0])} roads carry
-    all-speeds traffic, ${fmtN(reached)} at this filter. Each filter is its <b>own draw of 100,000 crossings</b>
-    from the trips that fast, not a subset of the one before, so counts can rise as the filter tightens.
-    Raising it moves the map from all movement to motor traffic.</div>`;
+  el.innerHTML = "";
 }
 
 export function uncertaintyNote(el){
   if(!el || !D) return;
   const s = D.stats;
-  el.innerHTML = `<div class="cap">These are <b>100,000 sampled trips</b>, not every trip, spread over
-    ${fmtN(s.roads_total)} roads — so most roads got only a handful. ${fmtN(s.roads_thin)} of them
-    (${Math.round(100*s.roads_thin/s.roads_total)}%) were crossed fewer than ${THIN} times, which is
-    too few to say anything: a road with 4 could really be anywhere between 1 and 10. Those roads are
-    ${S.showThin ? "drawn faint" : "hidden"}, and every tooltip gives the range the true value is
-    95% likely to sit in. Typical road: <b>±${Math.round(100*s.median_rse)}%</b>.</div>`;
+  el.innerHTML = `<div class="cap">Each filter is a random sample of <b>100,000 (trip, road) crossings</b>,
+    spread over ${fmtN(s.roads_total)} roads. ${fmtN(s.roads_thin)} of them
+    (${Math.round(100*s.roads_thin/s.roads_total)}%) have fewer than ${THIN} crossings at all speeds.</div>`;
 }
 
 export function quality(el){
@@ -456,22 +461,22 @@ export function quality(el){
 export function tooltip({layer, object, index}){
   if(!R || !layer || index < 0) return null;
   if(layer.id.startsWith("roads") && layer.id !== "roads-halo"){
-    const i = th(), k = R.counts[i][index], [lo, hi] = ci(k);
-    // VOLUME: the raw FlowSense count and nothing else (no speed, no OSM lanes)
-    if(rawOnly())
-      return {style:tipStyle, html:`<div style="color:#8195A8;font-size:11.5px;letter-spacing:.08em">ROAD · BOTH DIRECTIONS</div>
-        <div style="font-size:20px;margin:5px 0">${fmtN(k)} <span style="font-size:12.5px;color:#9DB1C4">sampled crossings (raw count)</span></div>`};
+    const i = th(), k = R.counts[i][index], [lo, hi] = ci(k), nvd = nvdbHtml(index);
+    // VOLUME: the raw FlowSense count at the chosen filter and nothing else (no OSM lanes)
+    if(S.mode === "volume")
+      return {style:tipStyle, html:`${nvd.title}<div style="color:#8195A8;font-size:11.5px;letter-spacing:.08em">ROAD · BOTH DIRECTIONS</div>
+        <div style="font-size:20px;margin:5px 0">${fmtN(k)} <span style="font-size:12.5px;color:#9DB1C4">sampled crossings at ${thLabel(i)} (raw count)</span></div>
+        ${nvd.lines}`};
     const slow = R.slowKnown[index] ? (R.slow[index]/100) : null;
-    const res = R.residKnown[index] ? (R.resid[index]/100) : null;
     const lanes = R.lanes[index], scls = D.street_classes[R.scls[index]];
-    return {style:tipStyle, html:`<div style="color:#8195A8;font-size:11.5px;letter-spacing:.08em">ROAD · BOTH DIRECTIONS · ${D.speed_classes[R.cls[index]]} KM/H CLASS</div>
+    return {style:tipStyle, html:`${nvd.title}<div style="color:#8195A8;font-size:11.5px;letter-spacing:.08em">ROAD · BOTH DIRECTIONS · ${D.speed_classes[R.cls[index]]} KM/H CLASS</div>
       <div style="font-size:20px;margin:5px 0">${fmtN(k)} <span style="font-size:12.5px;color:#9DB1C4">sampled crossings at ${thLabel(i)}</span></div>
       <div style="color:#8195A8">95% range ${lo.toFixed(1)} – ${hi.toFixed(1)}${k < THIN ? " · too few to rank" : ""}</div>
       <div>all speeds: ${fmtN(R.counts[0][index])} · ≥ 20 km/h: ${fmtN(R.counts[R.counts.length-1][index])}</div>
       ${lanes ? `<div>${lanes} lane${lanes > 1 ? "s" : ""}${scls ? " · " + scls.replace("_", " ") : ""} — <b>${(k/lanes).toFixed(1)}</b> crossings per lane</div>`
               : scls ? `<div>${scls.replace("_", " ")} · no lane count in OpenStreetMap</div>` : ""}
-      ${slow != null ? `<div>slow index <b>${slow.toFixed(2)}</b>${slow > 1.3 ? " (more slow movement)" : slow < 0.7 ? " (mostly fast traffic)" : ""}</div>` : ""}
-      ${res != null ? `<div>vs network position <b>${res > 0 ? "+" : ""}${(100*res).toFixed(0)}</b> percentile points</div>` : ""}`};
+      ${slow != null ? `<div>speed index <b>${slow.toFixed(2)}</b> (all-speeds share ÷ ≥ 20 km/h share)</div>` : ""}
+      ${nvd.lines}`};
   }
   if(layer.id === "load" && object)
     return {style:tipStyle, html:`<div style="color:#8195A8;font-size:11.5px;letter-spacing:.08em">100 M CELL</div>

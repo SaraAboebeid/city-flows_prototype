@@ -46,6 +46,7 @@ Run in order. Stages 2–5 hit the network; 1, 3, 4 and 6 are CPU-bound.
 | 29 | `29_network_centrality.py` | betweenness centrality on the Trafikverket graph, and observed flow against it | `flowsense_centrality.parquet`, `flowsense_betweenness.parquet` (cache) |
 | 30 | `30_export_phone_sweep.py` | packs the sweep, the uncertainty table and the residual for the phone dashboard | `../gothenburg-phone-js/data/sweep.json` |
 | 31 | `31_street_design.py` | OSM lane counts and street class onto each phone road: traffic per lane, slow traffic by street type | `flowsense_street_design.parquet`, `street_design.json` |
+| 32 | `32_volume_table.py` | every road on the phone map traced to its FlowSense source rows (raw `trajcount_…` per direction, their sum, the dashboard's value), with NVDB street name, road number, road manager and speed limit looked up by RLID (`nvdb.py`, needs `TRAFIKVERKET_API_KEY` in `../.env`). `torslanda` as argument limits it to that box | `../exports/goteborg_volume_roads.csv`, `../exports/goteborg_volume_directed.csv`, `nvdb_cache.json` |
 
 Re-running everything after new source data: 1 → 10 in order, then 11 → 14,
 then 7 (page) and 16 (JS version). The phone dashboard: 20 → 25 (stage 22 reads

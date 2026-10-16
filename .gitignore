@@ -1,5 +1,7 @@
 # CARTO basemap API key - never commit it
 carto_api_key.txt
+# other API keys (Trafikverket) - never commit them
+.env
 gothenburg-day-js/config.json
 gothenburg-phone-js/config.json
 gothenburg-corridors-js/config.json

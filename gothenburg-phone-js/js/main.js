@@ -46,6 +46,12 @@ async function start(){
     for(const k of Object.keys(S.layers)) S.layers[k] = on.has(k);
   }
 
+  // NVDB street name, road number etc. per road (stage 32; optional)
+  try {
+    const r = await fetch("data/nvdb.json");
+    if(r.ok) phone.loadNvdb(await r.json());
+  } catch(_) { /* no lookup: tooltips without NVDB data */ }
+
   await phone.load(SW);
   initMap();
   initUI();

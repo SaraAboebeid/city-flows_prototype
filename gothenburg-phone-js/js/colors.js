@@ -44,15 +44,12 @@ export const vramp = f => lerpRamp(VRAMP, f);
 const LRAMP = [[0,110,125],[0,205,165],[90,242,120],[190,255,70],[255,240,50]];
 export const lramp = f => lerpRamp(LRAMP, f);
 
-// two-sided scales. SLOW and NETWORK are both two-sided but mean different
-// things, so they get different pairs of colours rather than one palette.
+// two-sided scale
 function twoSided(under, over, mid){
   return t => {
     const c = t < 0 ? under : over, k = Math.min(1, Math.abs(t));
     return [mid[0]+(c[0]-mid[0])*k, mid[1]+(c[1]-mid[1])*k, mid[2]+(c[2]-mid[2])*k];
   };
 }
-// SLOW: fast traffic (violet) <- mixed -> slow movement (ember)
+// SPEED index: below 1 (violet) <- 1 -> above 1 (ember)
 export const diverge = twoSided([110,123,255], [255,122,69], [62,74,90]);
-// NETWORK: quieter than predicted (azure) <- as predicted -> busier (magenta)
-export const divergeNet = twoSided([70,205,255], [255,74,170], [58,66,82]);

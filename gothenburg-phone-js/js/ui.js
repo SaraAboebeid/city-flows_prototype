@@ -42,12 +42,15 @@ export function refreshPanel(){
   document.querySelectorAll("#thinChips .chip").forEach(b =>
     b.setAttribute("aria-pressed", String(S.showThin)));
   renderLayers();
-  // VOLUME is the raw count only, so the speed filter does not apply there
-  const raw = phone.rawOnly();
-  $("thLabel").textContent = raw ? "off in VOLUME" : phone.thLabel(S.th);
-  $("thSlider").value = String(raw ? 0 : S.th);
-  $("thSlider").disabled = raw;
-  $("sweepBtn").disabled = raw;
+  // the speed filter shows in SPEED only; the sampling and count-site panels nowhere
+  $("grpSpeed").hidden = !phone.filterOn();
+  for(const id of ["grpNoise", "grpCounts"]) $(id).hidden = true;
+  // the speed filter belongs to the SPEED view only
+  const on = phone.filterOn();
+  $("thLabel").textContent = on ? phone.thLabel(S.th) : "SPEED only";
+  $("thSlider").value = String(on ? S.th : 0);
+  $("thSlider").disabled = !on;
+  $("sweepBtn").disabled = !on;
   $("sweepBtn").setAttribute("aria-pressed", String(S.sweeping));
   $("sweepBtn").textContent = S.sweeping ? "STOP" : "SWEEP";
   phone.sweepNote($("sweepNote"));
@@ -69,7 +72,7 @@ export function setThreshold(i){
 }
 // called from the animation frame: one step every 0.9 s, bouncing at the ends
 export function tickSweep(dt){
-  if(!S.sweeping || phone.rawOnly()) return false;
+  if(!S.sweeping || !phone.filterOn()) return false;
   sweepAcc += dt;
   if(sweepAcc < 0.9) return false;
   sweepAcc = 0;
